@@ -159,8 +159,11 @@ make PythonAPI
 # ERROR with recast:copy SDL/ to ./Build/recast-src/RecastDemo/Contrib
 # ERROR with boost: Install boost zip file manually and unzip it, and copy to Build/
 # ERROR with dependencies: mkdir "PythonAPI/carla/dependencies/lib"
+# ERROR: <error: reference to 'Server' is ambiguous> & <errof:reference to 'Client' is ambiguous>:
+# --> at LibCarla/source/test/common/test_streaming.cpp Line 58, 93 Change Server<tcp::Server> to carla::streaming::low_level::Server<tcp::Server> | Line 63, 96 change Client<tcp::Client> to carla::streaming::low_level::Client<tcp::Client>
 
 make launch # to build vanilla Carla
+
 ```
 
 ## Part Three: Install Plugins
