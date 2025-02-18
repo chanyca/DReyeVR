@@ -579,7 +579,7 @@ make PythonAPI  # build the PythonAPI & LibCarla
 
 make launch     # build the development UE4 game in editor
 
-make package    # build the optimized UE4 packaged game (shipping)
+make package    # build the optimized UE4 packaged game (shipping), if error with this command, comment lines 151-153, 163-165 in carla/LibCarla/source/test/server/test_benchmark_streaming.cpp
 ```
 
 # Running `DReyeVR`
@@ -594,7 +594,7 @@ cd /PATH/TO/CARLA/Dist/CARLA_Shipping_0.9.13-dirty/LinuxNoEditor/ # or MacNoEdit
 # on Windows x64 Visual C++ Toolset
 cd \PATH\TO\CARLA\Build\UE4Carla\0.9.13-dirty\WindowsNoEditor\
 CarlaUE4.exe -vr
-
+# CarlaUE4.exe -vr -quality-level=Low
 # Optional flag: -quality-level=Low
 ```
 
