@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from HapticSharedControl.utils import *
 
 
 class HapticSharedControl:
-    def __init__(self, Cs=0.5, Kc=0.5, T=1.0, tp=1.0, speed=2, desired_trajectory=[]):
+    def __init__(self, Cs=0.5, Kc=0.5, T=1.0, tp=1.0, speed=2, desired_trajectory=[], vehicle_config={}):
         self.Cs = Cs
         self.Kc = Kc
         self.T = T
@@ -14,6 +15,7 @@ class HapticSharedControl:
 
         self.tp = tp  # preview time
         self.speed = speed  # vehicle speed
+        self.vehicle_config = vehicle_config # vehicle configuration
 
         self.desired_trajectory = desired_trajectory
 
@@ -36,11 +38,15 @@ class HapticSharedControl:
         # Calculate the error between desired trajectory and predicted position with tp[s] ahead
         self.epsilon_tp_t = self.distance_to_trajectory(self.predicted_position, t + self.tp)
 
-        theta_d = (self.Kc * self.epsilon_tp_t - steering_wheel_angle_t) * self.delta_t / self.T
+        theta_d = (
+            (self.Kc * self.epsilon_tp_t - (-1 + self.T / self.delta_t) * steering_wheel_angle_t)
+            * self.delta_t
+            / self.T
+        )
 
         return theta_d
 
-    def predict_position(self, current_position):
+    def predict_position(self, current_position, current_yaw_angle):
         x, y = current_position
         delta_phi = self.speed * self.tp / self.R
 
@@ -49,12 +55,13 @@ class HapticSharedControl:
         omega = delta_phi / 2 + np.pi / 2 - np.arctan(x / y)
 
         x_tp = x + preview_distance * np.cos(omega)
-        y_tp = y + preview_distance * np.sin(omega)
+        y_tp = y - preview_distance * np.sin(omega)
 
         predicted_position = np.array([x_tp, y_tp])
         return predicted_position
 
     def dist(self, p1, p2):
+        # cspell: ignore linalg
         return np.linalg.norm(p1 - p2)
 
     def distance_to_trajectory(self, position, current_time):
@@ -82,8 +89,18 @@ class HapticSharedControl:
 
         return self.dist(position, closest_point)
 
-    def calculate_turning_radius(self, steering_wheel_angle_t):
-        return L / np.sin(steering_wheel_angle_t + self.eps)
+    def calculate_turning_radius(self, steering_wheel_angles, method="simple"):
+        if method == "simple":
+            return simple_vehicle_model(steering_wheel_angles, self.vehicle_config)["Turning Radius"]
+        else:
+            return calculate_steering_mechanism(steering_wheel_angles, self.vehicle_config)["Turning Radius"]
+        
+    def calculate_avg_steering_angle(self, steering_wheel_angles, method="simple"):
+        if method == "simple":
+            return simple_vehicle_model(steering_wheel_angles, self.vehicle_config)["Steering Angle"]
+        else:
+            return calculate_steering_mechanism(steering_wheel_angles, self.vehicle_config)["Steering Angle"]
+        
 
     def get_desired_trajectory(self, t):
         if int(t) >= len(self.desired_trajectory):

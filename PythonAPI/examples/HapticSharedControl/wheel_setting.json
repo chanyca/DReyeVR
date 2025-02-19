@@ -41,7 +41,7 @@
             "up_ratio": 0.0
         }
     ],
-    "mass": 1845.0,
+    "mass": 1845.0, 
     "drag_coefficient": 0.15,
     "center_of_mass": {
         "x": 0.45,

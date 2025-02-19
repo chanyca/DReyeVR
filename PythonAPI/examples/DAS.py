@@ -6,13 +6,13 @@ import sys
 import time
 from pprint import pprint
 
+import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.bezier_path import *
 from HapticSharedControl.haptic_algo import *
+from HapticSharedControl.wheel_control import *
 from logidrivepy import LogitechController
-
-import carla
 
 P_0 = [-147.066772, -1322.415039]  # [y, x]
 P_f = [-687.066772, -2162.415039]
@@ -159,57 +159,39 @@ def main():
 
     sensor = DReyeVRSensor(world)
 
-    controller = LogitechController()
-    controller.steering_initialize()
-    max_range = 900
-    controller.set_operating_range(index=0, range=max_range)
-    print("\n---Logitech Spin Test---")
-    ff_available = controller.has_force_feedback(index=0)
-    print("Force feedback available:", ff_available)
+    controller = WheelController()
+    offset = 0.0
 
-    def get_data(data):
+    def control_loop(data):
         # global df
         global prev_yaw
         sensor.update(data)
-        data = sensor.data
+        measured_carla_data = sensor.data
         # pprint(sensor.data)  # more useful print here (contains all attributes)
-        current_pos = data["Location"][:-1]
-        current_yaw = data["Rotation"][1]
-        delta_yaw = current_yaw - prev_yaw
+        # 1. get current position and yaw
 
-        steering_curr = (delta_yaw + 0.016482) / (-0.000348)
-        haptic_control.theta_curr = steering_curr
+        # 2. get current forward speed
 
-        print(f"Current Position: {current_pos}, Current Yaw: {current_yaw}")
-        torque = haptic_control.calculate_torque(
-            current_position=current_position,
-            steering_wheel_angle_t=steering_angles[-1],
-            t=current_time,
-        )
-        next_position = haptic_control.predicted_position
+        # 3. predict future position
 
-        steering_angles = np.degrees(haptic_control.theta_d) / 450
-        offset = (float(steering_angles) - 23.004634) / 3.849622
-        print(int(offset))
-        if offset >= 100:
-            offset = 100
-        elif offset <= -100:
-            offset = -100
-        print(int(offset))
+        # 4. calculate DAS torque
+
+        # 5. translate DAS torque to steering wheel angle
+
         controller.play_spring_force(
             index=0,
-            offset_percentage=int(offset),
+            offset_percentage=int(np.clip(offset, -100, 100)),
             saturation_percentage=50,
             coefficient_percentage=100,
         )
-        controller.logi_update()
-        prev_yaw = current_yaw
+
+        steering_wheel_angle = controller.get_angle(translate=False)
+
         time.sleep(1.0)
-        # print(data) # this print is defined in LibCarla/source/carla/data/DReyeVREvent.h
 
     # print(sensor.ego_vehicle.get_physics_control())
     # subscribe to DReyeVR sensor
-    sensor.ego_sensor.listen(get_data)
+    sensor.ego_sensor.listen(control_loop)
     try:
         while True:
             if sync_mode:
@@ -222,10 +204,7 @@ def main():
             settings.synchronous_mode = False
             settings.fixed_delta_seconds = None
             world.apply_settings(settings)
-        controller.stop_spring_force(index=0)
-        controller.steering_shutdown()
-        del controller
-        gc.collect()
+        controller.__del__()
 
 
 if __name__ == "__main__":

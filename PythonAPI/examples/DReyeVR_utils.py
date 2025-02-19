@@ -1,9 +1,11 @@
-from typing import Optional, Any, Dict, List
+import os
+import sys
+import time
+from typing import Any, Dict, List, Optional
+
 import carla
 import numpy as np
-import time
 
-import sys, os
 sys.path.append(os.path.join(os.getenv("CARLA_ROOT"), "PythonAPI"))
 import examples  # calls ./__init__.py to add all the necessary things to path
 
@@ -12,9 +14,7 @@ def find_ego_vehicle(world: carla.libcarla.World) -> Optional[carla.libcarla.Veh
     DReyeVR_vehicles: str = "harplab.dreyevr_vehicle.*"
     ego_vehicles_in_world = list(world.get_actors().filter(DReyeVR_vehicles))
     if len(ego_vehicles_in_world) >= 1:
-        print(
-            f"Found a DReyeVR EgoVehicle in the world ({ego_vehicles_in_world[0].id})"
-        )
+        print(f"Found a DReyeVR EgoVehicle in the world ({ego_vehicles_in_world[0].id})")
         return ego_vehicles_in_world[0]
 
     DReyeVR_vehicle: Optional[carla.libcarla.Vehicle] = None
@@ -23,9 +23,7 @@ def find_ego_vehicle(world: carla.libcarla.World) -> Optional[carla.libcarla.Veh
         bp = available_ego_vehicles[0]
         print(f'Spawning only available EgoVehicle: "{bp.id}"')
     else:
-        print(
-            f"Found {len(available_ego_vehicles)} available EgoVehicles. Which one to use?"
-        )
+        print(f"Found {len(available_ego_vehicles)} available EgoVehicles. Which one to use?")
         for i, ego in enumerate(available_ego_vehicles):
             print(f"\t[{i}] - {ego.id}")
         print()
@@ -74,6 +72,7 @@ def find_ego_sensor(world: carla.libcarla.World) -> Optional[carla.libcarla.Sens
 
 class DReyeVRSensor:
     def __init__(self, world: carla.libcarla.World):
+        self.vehicle: carla.libcarla.Vehicle = find_ego_vehicle(world)
         self.ego_sensor: carla.sensor.dreyevrsensor = find_ego_sensor(world)
         self.data: Dict[str, Any] = {}
         print("initialized DReyeVRSensor PythonAPI client")
@@ -95,6 +94,26 @@ class DReyeVRSensor:
         elements: List[str] = [key for key in dir(data) if "__" not in key]
         for key in elements:
             self.data[key] = self.preprocess(getattr(data, key))
+        # update location and rotation
+        location = self.ego_vehicle.get_transform().location
+        rotation = self.ego_vehicle.get_transform().rotation
+        self.data["Location"] = np.array([location.x, location.y, location.z])
+        self.data["Rotation"] = np.array([rotation.pitch, rotation.yaw, rotation.roll])
+        # velocity
+        velocity = self.ego_vehicle.get_velocity()
+        self.data["Velocity"] = np.array([velocity.x, velocity.y, velocity.z])
+        # angular velocity
+        angular_velocity = self.ego_vehicle.get_angular_velocity()
+        self.data["AngularVelocity"] = np.array([angular_velocity.x, angular_velocity.y, angular_velocity.z])
+        # wheel angles
+        wheel_locations = [
+            carla.VehicleWheelLocation.FL_Wheel,
+            carla.VehicleWheelLocation.FR_Wheel,
+            carla.VehicleWheelLocation.BL_Wheel,
+            carla.VehicleWheelLocation.BR_Wheel,
+        ]
+        for wheel in wheel_locations:
+            self.data[f"{wheel}_Angle"] = self.ego_vehicle.get_wheel_steer_angle(wheel)
 
     @classmethod
     def spawn(cls, world: carla.libcarla.World):
@@ -108,9 +127,7 @@ class DReyeVRSensor:
                 print("no eye tracker in blueprint library?!")
                 return None
             ego_vehicle = find_ego_vehicle()
-            ego_sensor = world.spawn_actor(
-                bp, ego_vehicle.get_transform(), attach_to=ego_vehicle
-            )
+            ego_sensor = world.spawn_actor(bp, ego_vehicle.get_transform(), attach_to=ego_vehicle)
             print("Spawned DReyeVR sensor: " + ego_sensor.type_id)
         return cls(world)
 
