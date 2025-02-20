@@ -109,7 +109,7 @@ def main():
             msg: String = create_ros_msg(sensor)
             pub.publish(msg)  # publish to ros master
         pprint(sensor.data)  # more useful print here (contains all attributes)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     # subscribe to DReyeVR sensor
     sensor.ego_sensor.listen(publish_and_print)

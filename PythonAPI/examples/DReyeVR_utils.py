@@ -72,7 +72,7 @@ def find_ego_sensor(world: carla.libcarla.World) -> Optional[carla.libcarla.Sens
 
 class DReyeVRSensor:
     def __init__(self, world: carla.libcarla.World):
-        self.vehicle: carla.libcarla.Vehicle = find_ego_vehicle(world)
+        self.ego_vehicle: carla.libcarla.Vehicle = find_ego_vehicle(world)
         self.ego_sensor: carla.sensor.dreyevrsensor = find_ego_sensor(world)
         self.data: Dict[str, Any] = {}
         print("initialized DReyeVRSensor PythonAPI client")
