@@ -9,53 +9,62 @@ class HapticSharedControl:
         self.Kc = Kc
         self.T = T
 
-        self.eps = 1e-6  # small value to avoid division by zero
-        self.delta_t = 1 / 30  # 30 Hz
-        self.lookaround_window = 5  # 5 points around the current time
-
         self.tp = tp  # preview time
         self.speed = speed  # vehicle speed
         self.vehicle_config = vehicle_config # vehicle configuration
 
         self.desired_trajectory = desired_trajectory
 
-    def calculate_torque(self, current_position, steering_wheel_angle_t, t):
+    def calculate_torque(self, current_position, steering_wheel_angles, current_yaw_angle, t):
+        # calculate the average steering angle
+        self.avg_steering_angle = self.calculate_avg_steering_angle(steering_wheel_angles)
         # calculate turning radius
-        self.R = self.calculate_turning_radius(steering_wheel_angle_t)
+        self.R = self.calculate_turning_radius(steering_wheel_angles)
 
         # Calculate the previewed driver model
-        self.theta_d = self.preview_driver_model(current_position, steering_wheel_angle_t, t)
+        self.theta_d = self.preview_driver_model(current_position, current_yaw_angle, t)
 
         self.e_t = self.distance_to_trajectory(current_position, t)
 
-        tau_das = -self.Cs * self.e_t * (steering_wheel_angle_t - self.theta_d)
+        coef = self.sigmoid(self.Cs * self.e_t)
+        
+        desired_steering_angle = self.theta_d
+        
+        tau_das = - (self.Cs * self.e_t) * (self.avg_steering_angle - self.theta_d)
 
-        return tau_das
+        return tau_das, coef, desired_steering_angle
 
-    def preview_driver_model(self, current_position, steering_wheel_angle_t, t):
+    def preview_driver_model(self, current_position, current_yaw_angle, t, method="simple"):
         # Predict the position of the vehicle at the preview time
-        self.predicted_position = self.predict_position(current_position)
+        self.predicted_position = self.predict_position(current_position, self.avg_steering_angle, current_yaw_angle)
         # Calculate the error between desired trajectory and predicted position with tp[s] ahead
-        self.epsilon_tp_t = self.distance_to_trajectory(self.predicted_position, t + self.tp)
+        # todo: consider the sign of the error epsilon_tp_t
+        self.epsilon_tp_t = self.distance_to_trajectory(self.predicted_position, t + self.tp) 
 
-        theta_d = (
-            (self.Kc * self.epsilon_tp_t - (-1 + self.T / self.delta_t) * steering_wheel_angle_t)
-            * self.delta_t
-            / self.T
-        )
-
+        # Calculate the desired steering angle
+        if method == 'simple':
+            theta_d = self.Kc * self.epsilon_tp_t - self.avg_steering_angle
+        else:
+            theta_d_curr = self.avg_steering_angle
+            theta_d_next = None
+            for delta_t in np.linspace(0, self.tp, 10):
+                theta_d_next = (self.Kc * self.epsilon_tp_t + ((self.T / delta_t) - 1)  * theta_d_curr) * (delta_t / self.T)
+                theta_d_curr = theta_d_next
+            theta_d = theta_d_next
         return theta_d
 
-    def predict_position(self, current_position, current_yaw_angle):
+    def predict_position(self, current_position, steering_wheel_angle_t, current_yaw_angle):
         x, y = current_position
+        rotating_angle = steering_wheel_angle_t + current_yaw_angle
         delta_phi = self.speed * self.tp / self.R
+        
+        # center of rotation
+        x_c = x + self.R * np.sin(rotating_angle)
+        y_c = y + self.R * np.cos(rotating_angle)
 
-        preview_distance = 2 * self.R * np.sin(delta_phi / 2)
-
-        omega = delta_phi / 2 + np.pi / 2 - np.arctan(x / y)
-
-        x_tp = x + preview_distance * np.cos(omega)
-        y_tp = y - preview_distance * np.sin(omega)
+        # predicted position
+        x_tp = x_c + self.R * np.cos(rotating_angle + delta_phi)
+        y_tp = y_c + self.R * np.sin(rotating_angle + delta_phi)
 
         predicted_position = np.array([x_tp, y_tp])
         return predicted_position
@@ -63,7 +72,7 @@ class HapticSharedControl:
     def dist(self, p1, p2):
         # cspell: ignore linalg
         return np.linalg.norm(p1 - p2)
-
+    
     def distance_to_trajectory(self, position, current_time):
         # More robust distance calculation by checking multiple points
         min_dist = float("inf")
@@ -101,7 +110,9 @@ class HapticSharedControl:
         else:
             return calculate_steering_mechanism(steering_wheel_angles, self.vehicle_config)["Steering Angle"]
         
-
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-x))
+    
     def get_desired_trajectory(self, t):
         if int(t) >= len(self.desired_trajectory):
             return self.desired_trajectory[-1]

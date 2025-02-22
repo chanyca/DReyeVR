@@ -107,7 +107,7 @@ class WheelController:
         else:
             return abs(self.get_state_engines().rgdwPOV[0] - 32767.0) / 65535.0
 
-    def __del__(self):
+    def exit(self):
         self.controller.steering_shutdown()
         del self.controller
         gc.collect()
@@ -150,25 +150,28 @@ def spin_controller_forward_reverse_test(controller):
     time.sleep(3)
     print("Forward test")
     df = {}
-
-    for offset in range(-100, 101, 10):
+    print("--------------------")
+    for offset in range(-100, 101, 1):
         print(f"Offset: {offset}", end="\n")
         # -i * 45 + 90
         # -4 ~ -18
         # -45 ~ -200
+        state = controller.get_state_engines()
+        print(f"Angle before: {controller.get_angle() * 450}", end=" --> ")
         controller.play_spring_force(
             offset_percentage=offset,
-            saturation_percentage=50,
-            coefficient_percentage=100,
+            saturation_percentage=100,
+            coefficient_percentage=80,
         )
-
+        time.sleep(0.5)
         state = controller.get_state_engines()
+        
         # export to csv
         df.setdefault("timestamp", []).append(str(time.time()))
         for key, value in vars(state).items():
             df.setdefault(key, []).append(value)
 
-        print(f"Angle: {controller.get_angle() * 450}")
+        print(f"Angle after: {controller.get_angle() * 450}")
         print(f"Acceleration: {controller.get_acceleration_pedal()}")
         time.sleep(1)
 
@@ -176,39 +179,45 @@ def spin_controller_forward_reverse_test(controller):
     time.sleep(5)
     
     print("Reverse test")
-    for offset in range(100, -101, -10):
+    for offset in range(100, -101, -1):
         print(f"Offset: {offset}", end="\n")
         # -i * 45 + 90
         # -4 ~ -18
         # -45 ~ -200
+        state = controller.get_state_engines()
+        print(f"Angle before: {controller.get_angle() * 450}", end=" --> ")
         controller.play_spring_force(
             offset_percentage=offset,
-            saturation_percentage=50,
-            coefficient_percentage=100,
+            saturation_percentage=100,
+            coefficient_percentage=80,
         )
-
+        time.sleep(0.5)
         state = controller.get_state_engines()
+        
         # export to csv
-        df["timestamp"].append(str(time.time()))
         df.setdefault("timestamp", []).append(str(time.time()))
         for key, value in vars(state).items():
             df.setdefault(key, []).append(value)
+
+        print(f"Angle after: {controller.get_angle() * 450}")
+        print(f"Acceleration: {controller.get_acceleration_pedal()}")
         time.sleep(1)
 
     controller.stop_spring_force()
     time.sleep(1)
     df = pd.DataFrame().from_dict(df)
-    df.to_excel("spin_test_offset5.xlsx", index=False)
+    df.to_excel("./data/spin_test_offset_0.xlsx", index=False)
     print("Forward reverse test done.")
     time.sleep(1)
+    controller.exit()
 
 
 def spin_test():
     controller = WheelController()
     spin_controller_forward_reverse_test(controller)
     print("Spin test passed.\n")
-    controller.__del__()
 
 
 if __name__ == "__main__":
     spin_test()
+    print("Done.")
