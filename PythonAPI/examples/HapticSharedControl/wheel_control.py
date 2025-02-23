@@ -245,7 +245,7 @@ def spin_controller_forward_reverse_test(controller):
     print(f"Angle final: {controller.get_angle() * 450}")
     time.sleep(1)
     df = pd.DataFrame().from_dict(df)
-    df.to_excel("./data/wheel_logs/spin_test_offset_backward.xlsx", index=False)
+    df.to_excel("./data/wheel_logs/spin_test_offset_forward.xlsx", index=False)
     print("Forward reverse test done.")
     time.sleep(1)
     controller.exit()
