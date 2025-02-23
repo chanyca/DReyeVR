@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from pprint import pprint
 
 import bezier as B
@@ -6,7 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
 
-with open("wheel_setting.json", "r") as f:
+__file_path__ = Path(__file__).resolve().parent
+
+with open(f"{__file_path__}/wheel_setting.json", "r") as f:
     Wheel_setting = json.load(f)
 L = abs(Wheel_setting["wheels"][0]["position"]["y"] - Wheel_setting["wheels"][2]["position"]["y"])
 T = abs(Wheel_setting["wheels"][0]["position"]["x"] - Wheel_setting["wheels"][1]["position"]["x"])
@@ -14,6 +17,7 @@ theta1 = np.radians(69.99)
 theta2 = np.radians(47.95)
 
 R = (L / np.sin(theta2) + np.sqrt((L / np.tan(theta1) + T) ** 2 + L**2)) / 2
+
 
 
 def calc_control_points_bezier_path(sx, sy, s_yaw, ex, ey, e_yaw, l_d, l_f, n_points=100):
@@ -153,7 +157,6 @@ def calculate_bezier_trajectory(
     end_yaw,
     n_points,
     turning_radius,
-    control_param=0.86,
     max_res=10,
     show_animation=True,
 ):
@@ -166,8 +169,8 @@ def calculate_bezier_trajectory(
 
     trajectories = {}
     # Find the optimal l_d and l_f: assume that ld and lf in range of [dist/4, ]
-    for l_d in np.linspace(dist / 5, dist, max_res):
-        for l_f in np.linspace(dist / 5, dist, max_res):
+    for l_d in np.linspace(dist/5, dist, max_res):
+        for l_f in np.linspace(dist/5, dist, max_res):
 
             paths, control_points = calc_control_points_bezier_path(
                 start_x, start_y, start_yaw, end_x, end_y, end_yaw, l_d, l_f, n_points=n_points
@@ -186,7 +189,7 @@ def calculate_bezier_trajectory(
                 )
 
             max_curvature = max(curvatures)
-
+            
             if abs(1 / max_curvature) >= turning_radius:
                 trajectories[(l_d, l_f)] = length
                 # print(f"l_d: {l_d}, l_f: {l_f}, length: {length}, radius: {abs(1 / max_curvature)}")
@@ -196,26 +199,38 @@ def calculate_bezier_trajectory(
     paths, control_points = calc_control_points_bezier_path(
         start_x, start_y, start_yaw, end_x, end_y, end_yaw, l_d, l_f
     )
-    path, _, __ = paths
-
+    path, _ , __ = paths
+    
     # Display the tangent, normal and radius of curvature at a given point
-    u = control_param  # Number in [0, 1]
-    x_target, y_target = bezier(u, control_points)
-    derivatives_cp = bezier_derivatives_control_points(control_points, 2)
-    point = bezier(u, control_points)
-    dt = bezier(u, derivatives_cp[1])
-    ddt = bezier(u, derivatives_cp[2])
+    radius_list = []
+    tangent_list = []
+    normal_list = []
+    curvature_center_list = []
+    
+    
+    for i, u in enumerate(np.linspace(0, 1, n_points)):
+        x_target, y_target = bezier(u, control_points)
+        derivatives_cp = bezier_derivatives_control_points(control_points, 2)
+        point = bezier(u, control_points)
+        dt = bezier(u, derivatives_cp[1])
+        ddt = bezier(u, derivatives_cp[2])
 
-    # Radius of curvature
-    radius = 1 / calc_curvature(dt[0], dt[1], ddt[0], ddt[1])
+        # Radius of curvature
+        radius = 1 / calc_curvature(dt[0], dt[1], ddt[0], ddt[1])
 
-    # Normalize derivative
-    dt /= np.linalg.norm(dt, 2)
-    tangent = np.array([point, point + dt])
-    normal = np.array([point, point + [-dt[1], dt[0]]])
-    curvature_center = point + np.array([-dt[1], dt[0]]) * radius
+        # Normalize derivative
+        dt /= np.linalg.norm(dt, 2)
+        tangent = np.array([point, point + dt])
+        normal = np.array([point, point + [-dt[1], dt[0]]])
+        curvature_center = point + np.array([-dt[1], dt[0]]) * radius
+        
+        radius_list.append(radius)
+        tangent_list.append(tangent)
+        normal_list.append(normal)
+        curvature_center_list.append(curvature_center)
+        
     circle = plt.Circle(
-        tuple(curvature_center), radius, color=(0, 0.8, 0.8), fill=False, linewidth=1
+        tuple(curvature_center_list[-1]), radius_list[-1], color=(0, 0.8, 0.8), fill=False, linewidth=1
     )
 
     assert path.T[0][0] == start_x, "path is invalid"
@@ -223,12 +238,9 @@ def calculate_bezier_trajectory(
     assert path.T[0][-1] == end_x, "path is invalid"
     assert path.T[1][-1] == end_y, "path is invalid"
 
-    plot_elements = {
+    path_params = {
         "path": path,
         "control_points": control_points,
-        "tangent": tangent,
-        "normal": normal,
-        "circle": circle,
         "start_x": start_x,
         "start_y": start_y,
         "end_x": end_x,
@@ -238,7 +250,11 @@ def calculate_bezier_trajectory(
         "x_target": x_target,
         "y_target": y_target,
         "dist": dist,
-        "radius": radius,
+        "radius": radius_list,
+        "tangent": tangent_list,
+        "normal": normal_list,
+        "curvature_center": curvature_center_list,
+        "circle": circle,        
     }
 
     if show_animation:  # pragma: no cover
@@ -256,4 +272,86 @@ def calculate_bezier_trajectory(
         ax.grid(True)
         plt.show()
 
-    return path, control_points, plot_elements
+    return path, control_points, path_params
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    plt.style.use('default')
+
+    P_0 = [-147.066772, -1322.415039] # [y, x]
+    P_f = [-687.066772, -2162.415039]
+    P_d = [-37.066772 , -2902.415039]
+    
+    yaw_0 = 0
+    yaw_d = 10
+    yaw_f = 90
+    
+    n_points = 100
+    path1, control_points1, params1 = calculate_bezier_trajectory(
+        start_pos=P_0[::-1],
+        end_pos=P_d[::-1],
+        start_yaw=yaw_0,
+        end_yaw=yaw_d,
+        n_points=n_points,
+        turning_radius=R,
+        show_animation=False,
+    )
+    # backward so reverse the yaw angle (+180)
+    path2, control_points2, params2 = calculate_bezier_trajectory(
+        start_pos=P_d[::-1],
+        end_pos=P_f[::-1],
+        start_yaw=180 + yaw_d,
+        end_yaw=180 + yaw_f,
+        n_points=n_points,
+        turning_radius=R,
+        show_animation=False,
+    )
+
+    # show 2 path in same plot
+    plt.figure()
+    plt.plot(path1.T[0], path1.T[1], label="Bezier Path 1")
+    plt.plot(control_points1.T[0], control_points1.T[1], "--o", label="Control Points 1")
+    plt.plot(params1["x_target"], params1["y_target"])
+    plt.plot(params1["tangent"][-1][:, 0], params1["tangent"][-1][:, 1], label="Tangent 1")
+    plt.plot(params1["normal"][-1][:, 0], params1["normal"][-1][:, 1], label="Normal 1")
+    plt.gca().add_artist(params1["circle"])
+    plot_arrow(
+        params1["start_x"],
+        params1["start_y"],
+        np.pi - params1["start_yaw"],
+        length=0.1 * params1["dist"],
+        width=0.02 * params1["dist"],
+    )
+    plot_arrow(
+        params1["end_x"],
+        params1["end_y"],
+        np.pi - params1["end_yaw"],
+        length=0.1 * params1["dist"],
+        width=0.02 * params1["dist"],
+    )
+
+    plt.plot(path2.T[0], path2.T[1], label="Bezier Path 2")
+    plt.plot(control_points2.T[0], control_points2.T[1], "--o", label="Control Points 2")
+    plt.plot(params2["x_target"], params2["y_target"])
+    plt.plot(params2["tangent"][-1][:, 0], params2["tangent"][-1][:, 1], label="Tangent 2")
+    plt.plot(params2["normal"][-1][:, 0], params2["normal"][-1][:, 1], label="Normal 2")
+    plt.gca().add_artist(params2["circle"])
+    plot_arrow(
+        params2["start_x"],
+        params2["start_y"],
+        np.pi - params2["start_yaw"],
+        length=0.1 * params2["dist"],
+        width=0.02 * params2["dist"],
+    )
+    plot_arrow(
+        params2["end_x"],
+        params2["end_y"],
+        np.pi - params2["end_yaw"],
+        length=0.1 * params2["dist"],
+        width=0.02 * params2["dist"],
+    )
+
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    plt.close()

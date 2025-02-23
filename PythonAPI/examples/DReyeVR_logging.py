@@ -6,7 +6,7 @@ import time
 from pprint import pprint
 
 import numpy as np
-from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
+from DReyeVR_utils import DReyeVRSensor
 
 try:
     import rospy
