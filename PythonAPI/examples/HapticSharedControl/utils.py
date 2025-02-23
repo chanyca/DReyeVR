@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+from scipy.spatial import KDTree
 
 
 def calculate_steering_mechanism(inner_wheel_steering_angle: float, outer_wheel_steering_angle: float, vehicle_config:dict) -> float:
@@ -22,13 +23,6 @@ def calculate_steering_mechanism(inner_wheel_steering_angle: float, outer_wheel_
     R = np.sqrt((a2 ** 2) + (R1 **2))
     return {"Turning Radius": R, "Steering Angle": delta}
 
-def cot(x):
-    return 1 / np.tan(x)
-
-def arccot(x):
-    # cspell: ignore arctan arccot
-    return np.arctan(1 / x)
-
 def simple_vehicle_model(steering_angles: float, vehicle_config: dict) -> dict:
     """
     Simple vehicle model to calculate the turning radius and steering angle
@@ -44,6 +38,30 @@ def simple_vehicle_model(steering_angles: float, vehicle_config: dict) -> dict:
     eps = 1e-6
     R = L / np.sin(avg_steering_angle + eps)
     return {"Turning Radius": R, "Steering Angle": avg_steering_angle}
+
+def cot(x):
+    return 1 / np.tan(x)
+
+def arccot(x):
+    # cspell: ignore arctan arccot
+    return np.arctan(1 / x)
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def find_closest_point(given_point, list_of_points):
+    # Convert list_of_points to a NumPy array for efficient processing
+    points = np.array(list_of_points)
+    
+    # Build a KD-Tree from the points
+    tree = KDTree(points)
+    
+    # Find the index of the nearest neighbor
+    _, nnidx = tree.query(given_point, k=1)
+    
+    # Return the closest point using the found index
+    return list_of_points[nnidx], nnidx
 
 
 def getAngle(a, b, c, degrees=True):
