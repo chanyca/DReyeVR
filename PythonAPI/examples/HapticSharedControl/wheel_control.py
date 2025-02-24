@@ -36,13 +36,15 @@ class WheelController:
             saturation_percentage=saturation_percentage,
             coefficient_percentage=coefficient_percentage,
         )
-        self.controller.logi_update()
+
 
     def stop_spring_force(self):
+        self.controller.logi_update()
         self.controller.stop_spring_force(index=self.controller_index)
 
     def get_state_engines(self):
         # cspell: ignore rgdw
+        self.controller.logi_update()
         state_contents = self.controller.get_state_engines(self.controller_index).contents
         return {
             "lX": state_contents.lX,
@@ -88,7 +90,7 @@ class WheelController:
                    normalized to the range [-1.0, 1.0]. If `translate` is False, the raw
                    angle value is returned.
         """
-
+        self.controller.logi_update()
         if not translate:
             return self.get_state_engines()["lX"]
         else:
@@ -104,7 +106,7 @@ class WheelController:
             float: The state of the acceleration pedal. If `translate` is True, returns a normalized
                    value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
         """
-
+        self.controller.logi_update()
         if not translate:
             return self.get_state_engines()["lY"]
         else:
@@ -120,7 +122,7 @@ class WheelController:
             float: The state of the brake pedal. If `translate` is True, returns a normalized
                    value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
         """
-
+        self.controller.logi_update()
         if not translate:
             return self.get_state_engines()["lRZ"]
         else:
@@ -136,13 +138,14 @@ class WheelController:
             float: The state of the DPad. If `translate` is True, returns a normalized
                    value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
         """
-
+        self.controller.logi_update()
         if not translate:
             return self.get_state_engines()["rgdwPOV"][0]
         else:
             return abs(self.get_state_engines()["rgdwPOV"][0] - 32767.0) / 65535.0
 
     def exit(self):
+        self.controller.logi_update()
         self.controller.steering_shutdown()
         del self.controller
         gc.collect()
