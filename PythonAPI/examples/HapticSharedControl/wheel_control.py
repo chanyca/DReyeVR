@@ -1,8 +1,10 @@
 import sys
 
 sys.path.append("../logidrivepy")
+import ctypes
 import gc
 import time
+from collections import defaultdict
 from pprint import pprint
 
 import numpy as np
@@ -14,22 +16,32 @@ MAX_ANGLE_RANGE = 900
 
 class WheelController:
     def __init__(self):
-        self.controller = LogitechController()
         self.controller_index = 0
+        self.controller = LogitechController()
         self.controller.steering_initialize()
+        
         self.controller.set_operating_range(index=self.controller_index, range=MAX_ANGLE_RANGE)
         print("\n---Logitech Controller Initialized---")
         print("Is connected:", self.controller.is_connected(index=self.controller_index))
         print(
             "Force feedback available:",
             self.controller.has_force_feedback(index=self.controller_index),
-        )
-        print("Operating range:", self.controller.set_operating_range(index=self.controller_index, range=MAX_ANGLE_RANGE))
+        )        
+        print("Operating range:", self.controller.get_operating_range(index=self.controller_index, range=ctypes.c_int()))
         
-    def play_spring_force(
-        self, offset_percentage, saturation_percentage=0.5, coefficient_percentage=1.0
-    ):  
-        self.controller.logi_update()
+    def play_spring_force(self, offset_percentage, saturation_percentage=0.5, coefficient_percentage=1.0):  
+        """
+        Plays a spring force effect on the controller.
+        This function updates the controller state and then plays a spring force effect
+        with the specified parameters. The spring force effect is used to simulate a 
+        spring-like resistance on the controller.
+        Args:
+            offset_percentage (float): The offset percentage for the spring force effect.
+            saturation_percentage (float, optional): The saturation percentage for the spring force effect. Defaults to 0.5.
+            coefficient_percentage (float, optional): The coefficient percentage for the spring force effect. Defaults to 1.0.
+        """
+        
+        self.controller.logi_update() # update the controller state before any operation
         self.controller.play_spring_force(
             index=self.controller_index,
             offset_percentage=offset_percentage,
@@ -39,10 +51,56 @@ class WheelController:
 
 
     def stop_spring_force(self):
+        """
+        Stops the spring force feedback on the controller.
+        This method updates the controller state and then stops the spring force
+        feedback for the controller at the specified index.
+        """
+        
         self.controller.logi_update()
         self.controller.stop_spring_force(index=self.controller_index)
 
     def get_state_engines(self):
+        """
+        Retrieves the state of the engines from the controller.
+        This method updates the controller state and retrieves various parameters
+        related to the engine's state, such as position, rotation, velocity, 
+        acceleration, and force along different axes, as well as slider, POV, 
+        and button states.
+        Returns:
+            dict: A dictionary containing the following keys and their corresponding values:
+                - "lX": int, position along the X-axis
+                - "lY": int, position along the Y-axis
+                - "lZ": int, position along the Z-axis
+                - "lRx": int, rotation around the X-axis
+                - "lRy": int, rotation around the Y-axis
+                - "lRz": int, rotation around the Z-axis
+                - "rglSlider": list of int, slider positions
+                - "rgdwPOV": list of int, POV hat switch positions
+                - "rgbButtons": list of int, button states
+                - "lVX": int, velocity along the X-axis
+                - "lVY": int, velocity along the Y-axis
+                - "lVZ": int, velocity along the Z-axis
+                - "lVRx": int, rotational velocity around the X-axis
+                - "lVRy": int, rotational velocity around the Y-axis
+                - "lVRz": int, rotational velocity around the Z-axis
+                - "rglVSlider": list of int, slider velocities
+                - "lAX": int, acceleration along the X-axis
+                - "lAY": int, acceleration along the Y-axis
+                - "lAZ": int, acceleration along the Z-axis
+                - "lARx": int, rotational acceleration around the X-axis
+                - "lARy": int, rotational acceleration around the Y-axis
+                - "lARz": int, rotational acceleration around the Z-axis
+                - "rglASlider": list of int, slider accelerations
+                - "lFX": int, force along the X-axis
+                - "lFY": int, force along the Y-axis
+                - "lFZ": int, force along the Z-axis
+                - "lFRx": int, rotational force around the X-axis
+                - "lFRy": int, rotational force around the Y-axis
+                - "lFRz": int, rotational force around the Z-axis
+                - "rglFSlider": list of int, slider forces
+        """
+        
         # cspell: ignore rgdw
         self.controller.logi_update()
         state_contents = self.controller.get_state_engines(self.controller_index).contents
@@ -145,12 +203,17 @@ class WheelController:
             return abs(self.get_state_engines()["rgdwPOV"][0] - 32767.0) / 65535.0
 
     def exit(self):
+        """
+        Shuts down the steering controller and releases the resources.
+        """
+        
         self.controller.logi_update()
         self.controller.steering_shutdown()
         del self.controller
         gc.collect()
 
 
+# --- Test functions ---
 def spin_controller_full_test(controller):
     df = {}
 
@@ -184,79 +247,79 @@ def spin_controller_full_test(controller):
     controller.stop_spring_force()
 
 
-def spin_controller_forward_reverse_test(controller):
-    #NOTE: why the offset and measured is not the same?
+def spin_controller_forward_reverse_test(controller) -> None:
+    def spin_test(controller, range_: list, step:int, forward:bool=True) -> dict:
+        df = {}
+        print("Waiting for 3 seconds")
+        time.sleep(3)
+        print("--------------------")
+        start, end = range_ if forward else range_[::-1]
+        end += 1 if forward else -1
+        step = step if forward else -step
+        for offset in range(start, end, step):
+            print(f"//=====\nOffset: {offset}", end="\n")
+            print(f"Angle before: {round(controller.get_angle() * 450, 1)}", end=" --> ")
+            # play spring force
+            controller.play_spring_force(
+                offset_percentage=offset,
+                saturation_percentage=50,
+                coefficient_percentage=100,
+            )
+
+            time.sleep(0.8)
+            state = controller.get_state_engines()
+
+            # export to csv
+            df.setdefault("timestamp", []).append(str(time.time()))
+            for key, value in state.items():
+                df.setdefault(key, []).append(value)
+
+            print(f"Angle after: {round(controller.get_angle() * 450, 1)}")
+            print(f"Acceleration: {controller.get_acceleration_pedal()}")
+        return df
+    
+    data = {}
+    print("\nForward test")
+    temp = spin_test(controller, range_=(-100, 100), step=10, forward=True)
+    controller.stop_spring_force()
     time.sleep(3)
-    print("Forward test")
-    df = {}
-    print("--------------------")
+    data = append_dict(data, temp)
     
-    for offset in range(-100, 101, 10):
-        print(f"//=====\nOffset: {offset}", end="\n")
-        # -i * 45 + 90
-        # -4 ~ -18
-        # -45 ~ -200
-        print(f"Angle before: {round(controller.get_angle() * 450, 1)}", end=" --> ")
-        controller.play_spring_force(
-            offset_percentage=offset,
-            saturation_percentage=100,
-            coefficient_percentage=100,
-        )
-
-        time.sleep(0.5)
-        state = controller.get_state_engines()
-
-        # export to csv
-        df.setdefault("timestamp", []).append(str(time.time()))
-        for key, value in state.items():
-            df.setdefault(key, []).append(value)
-
-        print(f"Angle after: {round(controller.get_angle() * 450, 1)}")
-        print(f"Acceleration: {controller.get_acceleration_pedal()}")
-        time.sleep(1)
-
+    print("\nReverse test")
+    temp = spin_test(controller, range_=(-100, 100), step=10, forward=False)
     controller.stop_spring_force()
-    time.sleep(5)
+    time.sleep(3)
+    data = append_dict(data, temp)
     
-    print("Reverse test")
-
-    for offset in range(100, -101, -10):
-        print(f"//=====\nOffset: {offset}", end="\n")
-        # -i * 45 + 90
-        # -4 ~ -18
-        # -45 ~ -200
-        print(f"Angle before: {round(controller.get_angle() * 450, 1)}", end=" --> ")
-        controller.play_spring_force(
-            offset_percentage=offset,
-            saturation_percentage=100,
-            coefficient_percentage=100,
-        )
-
-        time.sleep(0.5)
-        state = controller.get_state_engines()
-        
-        # export to csv
-        df.setdefault("timestamp", []).append(str(time.time()))
-        for key, value in state.items():
-            df.setdefault(key, []).append(value)
-
-        print(f"Angle after: {round(controller.get_angle() * 450, 1)}")
-        print(f"Acceleration: {controller.get_acceleration_pedal()}")
-        time.sleep(1)
-
+    print("\nForward test")
+    temp = spin_test(controller, range_=(-100, 100), step=10, forward=True)
     controller.stop_spring_force()
-    print(f"Angle final: {controller.get_angle() * 450}")
-    time.sleep(1)
-    df = pd.DataFrame().from_dict(df)
+    time.sleep(3)
+    data = append_dict(data, temp)
+    
+    print("\nReverse test")
+    temp = spin_test(controller, range_=(-100, 100), step=10, forward=False)
+    controller.stop_spring_force()
+    time.sleep(3)
+    data = append_dict(data, temp)
+    
+    # export to excel
+    df = pd.DataFrame().from_dict(data)
     df.to_excel("./data/wheel_logs/spin_test_offset_forward.xlsx", index=False)
-    print("Forward reverse test done.")
+    print("Forward-reverse test done.")
     time.sleep(1)
     controller.exit()
+
+def append_dict(d1, d2):
+    for key, value in d2.items():
+        d1.setdefault(key, []).extend(value)
+    return d1
 
 
 def spin_test():
     controller = WheelController()
-    spin_controller_forward_reverse_test(controller)
+    spin_controller_forward_reverse_test(controller) 
+    # spin_controller_full_test(controller)
     print("Spin test passed.\n")
 
 
