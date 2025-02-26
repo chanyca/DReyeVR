@@ -124,8 +124,12 @@ class Vehicle:
 
         if self.vehicle_model == "simple":
             # REF: https://www.theautopian.com/the-engineering-behind-why-some-cars-can-turn-tighter-than-others/
-            turning_angle_rad = outer_wheel_steering_angle_rad
-            turning_radius = self.wheelbase / np.sin(turning_angle_rad) + self.tire_width / 2
+            steering_angle_rad = outer_wheel_steering_angle_rad
+            center_of_mass = self.wheelbase * self.center_of_mass_ratio
+            turning_radius = np.sqrt(
+                center_of_mass**2 + (self.wheelbase**2) / np.tan(steering_angle_rad) ** 2
+            )
+            turning_angle_rad = np.arctan(self.center_of_mass_ratio * np.tan(steering_angle_rad))
         else:
             # Calculate the turning radius using the Ackermann steering model
             # REF: https://www.ijser.org/researchpaper/optimizing-the-turning-radius-of-a-vehicle-using-symmetric.pdf
