@@ -6,18 +6,7 @@ import bezier as B
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
-
-__file_path__ = Path(__file__).resolve().parent
-
-with open(f"{__file_path__}/wheel_setting.json", "r") as f:
-    Wheel_setting = json.load(f)
-L = abs(Wheel_setting["wheels"][0]["position"]["y"] - Wheel_setting["wheels"][2]["position"]["y"])
-T = abs(Wheel_setting["wheels"][0]["position"]["x"] - Wheel_setting["wheels"][1]["position"]["x"])
-theta1 = np.radians(69.99)
-theta2 = np.radians(47.95)
-
-R = (L / np.sin(theta2) + np.sqrt((L / np.tan(theta1) + T) ** 2 + L**2)) / 2
-
+from utils import *
 
 
 def calc_control_points_bezier_path(sx, sy, s_yaw, ex, ey, e_yaw, l_d, l_f, n_points=100):
@@ -169,8 +158,8 @@ def calculate_bezier_trajectory(
 
     trajectories = {}
     # Find the optimal l_d and l_f: assume that ld and lf in range of [dist/4, ]
-    for l_d in np.linspace(dist/5, dist, max_res):
-        for l_f in np.linspace(dist/5, dist, max_res):
+    for l_d in np.linspace(dist / 5, dist, max_res):
+        for l_f in np.linspace(dist / 5, dist, max_res):
 
             paths, control_points = calc_control_points_bezier_path(
                 start_x, start_y, start_yaw, end_x, end_y, end_yaw, l_d, l_f, n_points=n_points
@@ -189,7 +178,7 @@ def calculate_bezier_trajectory(
                 )
 
             max_curvature = max(curvatures)
-            
+
             if abs(1 / max_curvature) >= turning_radius:
                 trajectories[(l_d, l_f)] = length
                 # print(f"l_d: {l_d}, l_f: {l_f}, length: {length}, radius: {abs(1 / max_curvature)}")
@@ -197,17 +186,16 @@ def calculate_bezier_trajectory(
     l_f, l_d = min(trajectories, key=trajectories.get)
 
     paths, control_points = calc_control_points_bezier_path(
-        start_x, start_y, start_yaw, end_x, end_y, end_yaw, l_d, l_f
+        start_x, start_y, start_yaw, end_x, end_y, end_yaw, l_d, l_f, n_points=n_points
     )
-    path, _ , __ = paths
-    
+    path, d_path, dd_path = paths
+
     # Display the tangent, normal and radius of curvature at a given point
     radius_list = []
     tangent_list = []
     normal_list = []
     curvature_center_list = []
-    
-    
+
     for i, u in enumerate(np.linspace(0, 1, n_points)):
         x_target, y_target = bezier(u, control_points)
         derivatives_cp = bezier_derivatives_control_points(control_points, 2)
@@ -223,14 +211,18 @@ def calculate_bezier_trajectory(
         tangent = np.array([point, point + dt])
         normal = np.array([point, point + [-dt[1], dt[0]]])
         curvature_center = point + np.array([-dt[1], dt[0]]) * radius
-        
+
         radius_list.append(radius)
         tangent_list.append(tangent)
         normal_list.append(normal)
         curvature_center_list.append(curvature_center)
-        
+
     circle = plt.Circle(
-        tuple(curvature_center_list[-1]), radius_list[-1], color=(0, 0.8, 0.8), fill=False, linewidth=1
+        tuple(curvature_center_list[-1]),
+        radius_list[-1],
+        color=(0, 0.8, 0.8),
+        fill=False,
+        linewidth=1,
     )
 
     assert path.T[0][0] == start_x, "path is invalid"
@@ -254,7 +246,7 @@ def calculate_bezier_trajectory(
         "tangent": tangent_list,
         "normal": normal_list,
         "curvature_center": curvature_center_list,
-        "circle": circle,        
+        "circle": circle,
     }
 
     if show_animation:  # pragma: no cover
@@ -274,19 +266,28 @@ def calculate_bezier_trajectory(
 
     return path, control_points, path_params
 
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    plt.style.use('default')
 
-    P_0 = [-147.066772, -1322.415039] # [y, x]
+    plt.style.use("default")
+
+    __file_path__ = Path(__file__).resolve().parent
+
+    with open(f"{__file_path__}/wheel_setting.json", "r") as f:
+        vehicle_config = json.load(f)
+    vehicle = Vehicle(vehicle_config=vehicle_config)
+    R = vehicle.minimum_turning_radius
+
+    P_0 = [-147.066772, -1322.415039]  # [y, x]
     P_f = [-687.066772, -2162.415039]
-    P_d = [-37.066772 , -2902.415039]
-    
+    P_d = [-37.066772, -2902.415039]
+
     yaw_0 = 0
     yaw_d = 10
     yaw_f = 90
-    
-    n_points = 100
+
+    n_points = 10
     path1, control_points1, params1 = calculate_bezier_trajectory(
         start_pos=P_0[::-1],
         end_pos=P_d[::-1],
