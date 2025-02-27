@@ -72,7 +72,6 @@ def find_ego_sensor(world: carla.libcarla.World) -> Optional[carla.libcarla.Sens
 
 class DReyeVRSensor:
     def __init__(self, world: carla.libcarla.World):
-        self.ego_vehicle: carla.libcarla.Vehicle = find_ego_vehicle(world)
         self.ego_sensor: carla.sensor.dreyevrsensor = find_ego_sensor(world)
         self.data: Dict[str, Any] = {}
         print("initialized DReyeVRSensor PythonAPI client")
@@ -94,26 +93,6 @@ class DReyeVRSensor:
         elements: List[str] = [key for key in dir(data) if "__" not in key]
         for key in elements:
             self.data[key] = self.preprocess(getattr(data, key))
-        # update location and rotation
-        location = self.ego_vehicle.get_transform().location
-        rotation = self.ego_vehicle.get_transform().rotation
-        self.data["Location"] = np.array([location.x, location.y, location.z])
-        self.data["Rotation"] = np.array([rotation.pitch, rotation.yaw, rotation.roll])
-        # velocity
-        velocity = self.ego_vehicle.get_velocity()
-        self.data["Velocity"] = np.array([velocity.x, velocity.y, velocity.z])
-        # angular velocity
-        angular_velocity = self.ego_vehicle.get_angular_velocity()
-        self.data["AngularVelocity"] = np.array([angular_velocity.x, angular_velocity.y, angular_velocity.z])
-        # wheel angles
-        wheel_locations = [
-            carla.VehicleWheelLocation.FL_Wheel,
-            carla.VehicleWheelLocation.FR_Wheel,
-            carla.VehicleWheelLocation.BL_Wheel,
-            carla.VehicleWheelLocation.BR_Wheel,
-        ]
-        for wheel in wheel_locations:
-            self.data[f"{wheel}_Angle"] = self.ego_vehicle.get_wheel_steer_angle(wheel)
 
     @classmethod
     def spawn(cls, world: carla.libcarla.World):

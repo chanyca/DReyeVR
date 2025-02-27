@@ -1,9 +1,7 @@
 import argparse
-import csv
 import os
 import sys
 import time
-from pprint import pprint
 
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor
@@ -21,6 +19,7 @@ import carla
 
 def create_ros_msg(ego_sensor: DReyeVRSensor, delim: str = "; "):
     assert rospy is not None and String is not None
+    # TODO: need to make this work with custom ROS types
     s = "rosT=" + str(rospy.get_time()) + delim
     for key in ego_sensor.data:
         s += f"{key}={ego_sensor.data[key]}{delim}"
@@ -44,8 +43,6 @@ def init_ros_pub(IP_SELF, IP_ROSMASTER, PORT_ROSMASTER):
 
 
 def main():
-    global df
-
     argparser = argparse.ArgumentParser(description=__doc__)
     argparser.add_argument(
         "--host",
@@ -65,7 +62,7 @@ def main():
         "-rh",
         "--roshost",
         metavar="Rh",
-        default="172.31.25.167",
+        default="192.168.86.33",
         help="IP of the host ROS server (default: 192.168.86.33)",
     )
     argparser.add_argument(
@@ -79,7 +76,7 @@ def main():
         "-sh",
         "--selfhost",
         metavar="Sh",
-        default="163.221.139.137",
+        default="192.168.86.123",
         help="IP of the ROS node (this machine) (default: 192.168.86.123)",
     )
 
@@ -87,7 +84,7 @@ def main():
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
-    sync_mode = True  # synchronous mode
+    sync_mode = False  # synchronous mode
     np.random.seed(int(time.time()))
 
     if rospy is not None:
@@ -103,13 +100,12 @@ def main():
     sensor = DReyeVRSensor(world)
 
     def publish_and_print(data):
-        # global df
         sensor.update(data)
         if rospy is not None:
             msg: String = create_ros_msg(sensor)
             pub.publish(msg)  # publish to ros master
-        pprint(sensor.data)  # more useful print here (contains all attributes)
-        time.sleep(0.1)
+        print(sensor.data)  # more useful print here (contains all attributes)
+        # print(data) # this print is defined in LibCarla/source/carla/data/DReyeVREvent.h
 
     # subscribe to DReyeVR sensor
     sensor.ego_sensor.listen(publish_and_print)
@@ -130,7 +126,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-
     except KeyboardInterrupt:
         pass
     finally:
