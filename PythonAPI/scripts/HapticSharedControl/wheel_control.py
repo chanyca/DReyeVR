@@ -202,10 +202,54 @@ class WheelController:
         else:
             return abs(self.get_state_engines()["lRZ"] - 32767.0) / 65535.0
 
-    def get_buttons_pressed(self, translate=True):
+    def get_buttons_pressed(self):
+        """
+        Retrieves and processes the current state of buttons on the steering wheel controller.
+        This method reads the current state of the controller, processes the D-pad and button inputs,
+        and returns a dictionary mapping button names to their current states.
+        Returns:
+            dict: A dictionary with the following keys:
+                - "D-pad": str - Direction of the D-pad ("up", "right", "down", "left", or "center")
+                - "A": bool - True if A button is pressed, False otherwise
+                - "B": bool - True if B button is pressed, False otherwise
+                - "X": bool - True if X button is pressed, False otherwise
+                - "Y": bool - True if Y button is pressed, False otherwise
+        Note:
+            This method requires the controller to be initialized and connected.
+            Uses `logi_update()` to get the latest input state from the controller.
+        """
+
+        def process_dpad(value):
+            if value == 0:
+                return "up"
+            elif value == 9000:
+                return "right"
+            elif value == 18000:
+                return "down"
+            elif value == 27000:
+                return "left"
+            return "center"
+
+        def process_buttons(value):
+            if value != 0:
+                return True
+            return False
 
         self.controller.logi_update()
-        # get the button states
+
+        states = self.get_state_engines()
+
+        rgdwPOV = states["rgdwPOV"]
+        rgbButtons = states["rgbButtons"]
+
+        key_mapping = {
+            "D-pad": process_dpad(rgdwPOV[0]),
+            "A": process_buttons(rgbButtons[0]),
+            "B": process_buttons(rgbButtons[1]),
+            "X": process_buttons(rgbButtons[2]),
+            "Y": process_buttons(rgbButtons[3]),
+        }
+        return key_mapping
 
     def exit(self):
         """
@@ -238,7 +282,7 @@ def record_states(controller, duration=10):
         for (curr_key, curr_values), (key, value) in zip(curr_state.items(), states.items()):
             if states[key] != curr_values and key != "lAZ":
                 print(f"{key}: {value} --> {curr_values}")
-        
+
         states = curr_state
         print("----")
         time.sleep(0.5)

@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from pprint import pprint
+from turtle import backward
 
 import carla
 import numpy as np
@@ -13,6 +14,69 @@ from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.simulation import *
 from HapticSharedControl.wheel_control import *
+
+with open("../data/driving_path_left2right.txt", "r") as f:
+    data_left2right = f.readlines()
+    data_left2right = [line.strip().split(",") for line in data_left2right]
+    data_left2right = [[float(val) for val in line] for line in data_left2right]
+    data_left2right = np.array(data_left2right)
+
+
+predefined_path = {
+    "0": {
+        "P_0": [-1.47066772, -13.22415039],
+        "P_d": [-0.37066772, -29.02415039],
+        "P_f": [-6.87066772, -21.62415039],
+        "yaw_0": 0,
+        "yaw_d": 10,
+        "yaw_f": 90,
+        "forward paths": None,
+        "backward paths": None,
+    },
+    "1": {
+        "P_0": [-2.376371583333333, -13.749357381666668],
+        "P_d": [-0.566469992644628, -27.297582133636364],
+        "P_f": [-7.7486732, -21.271947543333333],
+        "yaw_0": 1.0237121333333334,
+        "yaw_d": 27.831170400000005,
+        "yaw_f": 91.95542591499999,
+        "forward paths": process_exist_path(data_left2right[:40]),
+        "backward paths": process_exist_path(data_left2right[40:]),
+    },
+}
+
+# Load the vehicle configuration
+__file_path__ = Path(__file__).resolve().parent
+with open(f"{__file_path__}/HapticSharedControl/wheel_setting.json", "r") as f:
+    vehicle_config = json.load(f)
+vehicle = Vehicle(vehicle_config=vehicle_config)
+R = vehicle.minimum_turning_radius
+
+n_points = 60
+_, _, param_fw = calculate_bezier_trajectory(
+    start_pos=predefined_path["0"]["P_0"][::-1],
+    end_pos=predefined_path["0"]["P_d"][::-1],
+    start_yaw=predefined_path["0"]["yaw_0"],
+    end_yaw=predefined_path["0"]["yaw_d"],
+    n_points=n_points,
+    turning_radius=R,
+    show_animation=False,
+)
+
+_, _, param_bw = calculate_bezier_trajectory(
+    start_pos=predefined_path["0"]["P_d"][::-1],
+    end_pos=predefined_path["0"]["P_f"][::-1],
+    start_yaw=predefined_path["0"]["yaw_d"] + 180,
+    end_yaw=predefined_path["0"]["yaw_f"] + 180,
+    n_points=n_points,
+    turning_radius=R,
+    show_animation=False,
+)
+
+predefined_path["0"]["forward paths"] = param_fw
+predefined_path["0"]["backward paths"] = param_bw
+
+# Compute the path for the first predefined path
 
 
 def main():
@@ -44,9 +108,17 @@ def main():
     sensor = DReyeVRSensor(world)
 
     controller = WheelController()
-    offset = 0.0
+    delta_t = 1 / 20.0
+    backward_btn_pressed_cnt = 0
+    trajectory = []
+    vehicle_yaw_angles_deg = []
+    torques = []
+    steering_wheel_angles = []
+    desired_steering_angles = []
 
     def control_loop(data):
+        global backward_btn_pressed_cnt
+
         sensor.update(data)
         measured_carla_data = sensor.data
         # pprint(sensor.data)  # more useful print here (contains all attributes)
@@ -61,20 +133,67 @@ def main():
         velocity = measured_carla_data["Velocity"][0:2]  # [x, y]
         speed = np.linalg.norm(velocity)
         # get signal from Logitech Wheel SDK, if pressed the reverse button, then reverse the steering angle
+        buttons = controller.get_buttons_pressed()
+        if any([btn_value for btn_value in list(buttons.values())[1:]]):
+            backward_btn_pressed_cnt += 1
 
-        steering_wheel_angle = None
+        backward = backward_btn_pressed_cnt % 2 == 1
+
+        speed *= -1 if backward else 1
+        # 2. get steering wheel angle
+        steering_wheel_angle = controller.get_angle() * 450.0  # in degrees
         steering_angles = [
             measured_carla_data["FL_Wheel_Angle"],
             measured_carla_data["FR_Wheel_Angle"],
         ]  # front wheel angles
 
-        # 3. predict future position
+        take_control = False
 
-        # 4. calculate DAS torque
+        # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
+        if dist(position_to_world, predefined_path["1"]["P_0"]) < 1:
+            param = predefined_path["1"]["forward paths"]
+            take_control = True
 
-        # 5. Control steering wheel angle
+        # 4. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
+        if dist(position_to_world, predefined_path["1"]["P_d"]) < 1:
+            param = predefined_path["1"]["backward paths"]
+            take_control = True
 
-        time.sleep(1.0)
+        if take_control:
+            haptic_control = HapticSharedControl(
+                Cs=0.5,
+                Kc=0.5,
+                T=2,
+                tp=1,
+                speed=speed,
+                desired_trajectory_params=param,
+                vehicle_config=vehicle_config,
+            )
+            torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
+                current_position=position_to_world,
+                steering_angles_deg=steering_angles,
+                current_yaw_angle_deg=vehicle_yaw,
+                steering_wheel_angle_deg=steering_wheel_angle,
+            )
+
+            torques.append(torque)
+            steering_wheel_angles.append(steering_wheel_angle)
+            trajectory.append(position_to_world)
+            vehicle_yaw_angles_deg.append(vehicle_yaw)
+            desired_steering_angles.append(desired_steering_angle_deg)
+
+            controller.play_spring_force(
+                offset_percentage=int(desired_steering_angle_deg * 100 / 450.0),
+                saturation_percentage=50,
+                coefficient_percentage=100,
+            )
+            controller.stop_spring_force()
+
+        if dist(position_to_world, predefined_path["1"]["P_f"]) < 1:
+            print("Simulation Completed")
+            return
+
+        time.sleep(delta_t)
 
     # print(sensor.ego_vehicle.get_physics_control())
     # subscribe to DReyeVR sensor
@@ -91,7 +210,7 @@ def main():
             settings.synchronous_mode = False
             settings.fixed_delta_seconds = None
             world.apply_settings(settings)
-        controller.__del__()
+        controller.exit()
 
 
 if __name__ == "__main__":

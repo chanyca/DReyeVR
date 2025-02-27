@@ -6,6 +6,7 @@ import bezier as B
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
+from scipy.interpolate import CubicSpline
 
 from .utils import *
 
@@ -268,10 +269,55 @@ def calculate_bezier_trajectory(
     return path, control_points, path_params
 
 
+def get_tangent_vector(path, t_query, normalize=False):
+    """Compute the tangent vector at a parameterized point t_query (0 to 1) on the path."""
+    # Separate x and y coordinates
+    x = np.array([p[0] for p in path])
+    y = np.array([p[1] for p in path])
+
+    # Parameterize the path (t from 0 to 1)
+    t = np.linspace(0, 1, len(path))
+
+    # Create cubic spline interpolation
+    cs_x = CubicSpline(t, x)
+    cs_y = CubicSpline(t, y)
+
+    # Compute derivatives (tangent components dx/dt, dy/dt)
+    dx_dt = cs_x(t_query, 1)  # First derivative of x
+    dy_dt = cs_y(t_query, 1)  # First derivative of y
+
+    tangent = np.array([dx_dt, dy_dt])
+
+    # Optionally normalize the tangent vector
+    if normalize:
+        norm = np.linalg.norm(tangent)
+        if norm > 0:  # Avoid division by zero
+            tangent = tangent / norm
+
+    return tangent
+
+
 def process_exist_path(path):
     # from exist path with N data points, get the start and end position, start and end
     # and compute radius, tangent, normal, curvature_center at each point
-    pass
+    param = {
+        "path": path,
+        "control_points": None,
+        "tangent": [],
+    }
+    x = [p[0] for p in path]
+    y = [p[1] for p in path]
+
+    # Interpolate for smooth plotting
+    for t in np.linspace(0, 1, len(path)):
+        cs_x = CubicSpline(t, x)
+        cs_y = CubicSpline(t, y)
+        # Get point and tangent at t_query
+        point_x = cs_x(t)
+        point_y = cs_y(t)
+        tangent = get_tangent_vector(path, t, normalize=True)
+        param["tangent"].append(tangent)
+    return param
 
 
 if __name__ == "__main__":

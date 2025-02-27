@@ -119,7 +119,7 @@ else:
     exit()
 
 if trial != "0":
-    df = pd.read_excel(f"{__file_path__}/data/trials/trial{trial}.xlsx")
+    df = pd.read_excel(f"{__file_path__.parent}/data/trials/trial{trial}.xlsx")
     x = df["LocationX"].to_list()
     y = df["LocationY"].to_list()
     yaw = df["RotationYaw"].to_list()
@@ -155,7 +155,7 @@ path2, control_points2, params2 = calculate_bezier_trajectory(
 
 # Simulation Parameters
 n_steps = None
-speed = 2
+speed = 1
 init_steering_angle = 10  # abs value
 
 # Run the simulation
