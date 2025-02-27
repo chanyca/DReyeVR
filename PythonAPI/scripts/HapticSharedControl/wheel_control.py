@@ -236,8 +236,10 @@ def record_states(controller, duration=10):
             continue
 
         for (curr_key, curr_values), (key, value) in zip(curr_state.items(), states.items()):
-            states[key] != curr_values
-            print(f"{key}: {value} --> {curr_values}")
+            if states[key] != curr_values and key != "lAZ":
+                print(f"{key}: {value} --> {curr_values}")
+        
+        states = curr_state
         print("----")
         time.sleep(0.5)
     return
@@ -355,7 +357,7 @@ def spin_test():
 
 def test_controller():
     controller = WheelController()
-    record_states(controller, duration=10)
+    record_states(controller, duration=100)
     controller.exit()
     print("Test passed.")
 
