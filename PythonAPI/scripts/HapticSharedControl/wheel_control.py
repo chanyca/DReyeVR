@@ -1,3 +1,14 @@
+"""Using the Logitech G920 Driving Force Racing Wheel with Python
+Notes for G920
+    XInput vs. DirectInput: G920 is primarily an XInput device for Xbox/PC. In DirectInput mode (via Logitech drivers), it’s treated as a generic joystick, and mappings might differ from XInput’s standard layout. If you’re using XInput instead, DIJOYSTATE2 won’t apply—use XINPUT_STATE instead.
+    Force Feedback: G920 supports force feedback in DirectInput via effects, not directly through lFX fields (set up separately with IDirectInputEffect).
+    Customization: Use G HUB to adjust sensitivity or rotation (e.g., 900°), which affects lX scaling.
+Troubleshooting
+    No Input: Ensure G920 is in DirectInput mode and drivers are installed (G HUB or Logitech Gaming Software).
+    Unexpected Values: Adjust axis ranges with DIPROPRANGE via SetProperty if defaults don’t match (-1000 to 1000).
+    Button Misalignment: Test all buttons and adjust indices based on output.
+"""
+
 import sys
 
 sys.path.append("../logidrivepy")
@@ -66,43 +77,44 @@ class WheelController:
 
     def get_state_engines(self):
         """
-        Retrieves the state of the engines from the controller.
-        This method updates the controller state and retrieves various parameters
-        related to the engine's state, such as position, rotation, velocity,
-        acceleration, and force along different axes, as well as slider, POV,
-        and button states.
-        Returns:
-            dict: A dictionary containing the following keys and their corresponding values:
-                - "lX": int, position along the X-axis
-                - "lY": int, position along the Y-axis
-                - "lZ": int, position along the Z-axis
-                - "lRx": int, rotation around the X-axis
-                - "lRy": int, rotation around the Y-axis
-                - "lRz": int, rotation around the Z-axis
-                - "rglSlider": list of int, slider positions
-                - "rgdwPOV": list of int, POV hat switch positions
-                - "rgbButtons": list of int, button states
-                - "lVX": int, velocity along the X-axis
-                - "lVY": int, velocity along the Y-axis
-                - "lVZ": int, velocity along the Z-axis
-                - "lVRx": int, rotational velocity around the X-axis
-                - "lVRy": int, rotational velocity around the Y-axis
-                - "lVRz": int, rotational velocity around the Z-axis
-                - "rglVSlider": list of int, slider velocities
-                - "lAX": int, acceleration along the X-axis
-                - "lAY": int, acceleration along the Y-axis
-                - "lAZ": int, acceleration along the Z-axis
-                - "lARx": int, rotational acceleration around the X-axis
-                - "lARy": int, rotational acceleration around the Y-axis
-                - "lARz": int, rotational acceleration around the Z-axis
-                - "rglASlider": list of int, slider accelerations
-                - "lFX": int, force along the X-axis
-                - "lFY": int, force along the Y-axis
-                - "lFZ": int, force along the Z-axis
-                - "lFRx": int, rotational force around the X-axis
-                - "lFRy": int, rotational force around the Y-axis
-                - "lFRz": int, rotational force around the Z-axis
-                - "rglFSlider": list of int, slider forces
+                Retrieves the state of the engines from the controller.
+                This method updates the controller state and retrieves various parameters
+                related to the engine's state, such as position, rotation, velocity,
+                acceleration, and force along different axes, as well as slider, POV,
+                and button states.
+                Returns:
+                    dict: A dictionary containing the following keys and their corresponding values:
+                        - "lX": int, position along the X-axis
+                        - "lY": int, position along the Y-axis
+                        - "lZ": int, position along the Z-axis (often unused)
+                        - "lRx": int, rotation around the X-axis
+                        - "lRy": int, rotation around the Y-axis
+                        - "lRz": int, rotation around the Z-axis (Rudder or twist)
+                        - "rglSlider": list of int, slider positions (L2/R2)
+                        - "rgdwPOV": list of int, POV hat switch positions (rgdwPOV[0]: The D-pad. Reported in hundredths of a degree (0° = up, 9000 = right, 18000 = down, 27000 = left, -1 = centered). Logitech D-pads typically support 8 directions.
+        Other POV entries (rgdwPOV[1-3]) are unused unless the device has multiple hats)
+                        - "rgbButtons": list of int, button states (0: A, 1: B, 2: X, 3: Y, 4: L1, 5: R1, 6: Select, 7: Start, 8: Mode (Logitech button), 9: Left stick click, 10: Right stick click)
+                        - "lVX": int, velocity along the X-axis
+                        - "lVY": int, velocity along the Y-axis
+                        - "lVZ": int, velocity along the Z-axis
+                        - "lVRx": int, rotational velocity around the X-axis
+                        - "lVRy": int, rotational velocity around the Y-axis
+                        - "lVRz": int, rotational velocity around the Z-axis
+                        - "rglVSlider": list of int, slider velocities
+                        - "lAX": int, acceleration along the X-axis
+                        - "lAY": int, acceleration along the Y-axis
+                        - "lAZ": int, acceleration along the Z-axis
+                        - "lARx": int, rotational acceleration around the X-axis
+                        - "lARy": int, rotational acceleration around the Y-axis
+                        - "lARz": int, rotational acceleration around the Z-axis
+                        - "rglASlider": list of int, slider accelerations
+                        - "lFX": int, force along the X-axis
+                        - "lFY": int, force along the Y-axis
+                        - "lFZ": int, force along the Z-axis
+                        - "lFRx": int, rotational force around the X-axis
+                        - "lFRy": int, rotational force around the Y-axis
+                        - "lFRz": int, rotational force around the Z-axis
+                        - "rglFSlider": list of int, slider forces
         """
 
         # cspell: ignore rgdw
@@ -190,27 +202,15 @@ class WheelController:
         else:
             return abs(self.get_state_engines()["lRZ"] - 32767.0) / 65535.0
 
-    def get_DPad(self, translate=True):
-        """
-        Retrieves the current state of the DPad.
-        Args:
-            translate (bool): If True, translates the raw DPad value to a normalized range [0, 1].
-                              If False, returns the raw DPad value.
-        Returns:
-            float: The state of the DPad. If `translate` is True, returns a normalized
-                   value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
-        """
+    def get_buttons_pressed(self, translate=True):
+
         self.controller.logi_update()
-        if not translate:
-            return self.get_state_engines()["rgdwPOV"][0]
-        else:
-            return abs(self.get_state_engines()["rgdwPOV"][0] - 32767.0) / 65535.0
+        # get the button states
 
     def exit(self):
         """
         Shuts down the steering controller and releases the resources.
         """
-
         self.controller.logi_update()
         self.controller.steering_shutdown()
         del self.controller
@@ -227,13 +227,19 @@ def record_states(controller, duration=10):
     Returns:
         dict: A dictionary containing the recorded states.
     """
-    states = defaultdict(list)
+    states = {}
     start_time = time.time()
     while time.time() - start_time < duration:
-        state = controller.get_state_engines()
-        for key, value in state.items():
-            print(f"{key}: {value}")
-        time.sleep(1)
+        curr_state = controller.get_state_engines()
+        if states == {}:
+            states = curr_state
+            continue
+
+        for (curr_key, curr_values), (key, value) in zip(curr_state.items(), states.items()):
+            states[key] != curr_values
+            print(f"{key}: {value} --> {curr_values}")
+        print("----")
+        time.sleep(0.5)
     return
 
 
