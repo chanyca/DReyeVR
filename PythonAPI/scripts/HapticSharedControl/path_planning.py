@@ -8,7 +8,10 @@ import numpy as np
 import scipy.special
 from scipy.interpolate import CubicSpline
 
-from .utils import *
+try:
+    from utils import *
+except ImportError:
+    from HapticSharedControl.utils import *
 
 
 def calc_control_points_bezier_path(sx, sy, s_yaw, ex, ey, e_yaw, l_d, l_f, n_points=100):
@@ -336,9 +339,9 @@ if __name__ == "__main__":
     P_f = [-687.066772, -2162.415039]
     P_d = [-37.066772, -2902.415039]
 
-    yaw_0 = 0
-    yaw_d = 10
-    yaw_f = 90
+    yaw_0 = 90 + (-90)
+    yaw_d = 90 + (-80)
+    yaw_f = 90 + (0)
 
     n_points = 10
     path1, control_points1, params1 = calculate_bezier_trajectory(

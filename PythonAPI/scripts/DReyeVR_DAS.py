@@ -15,11 +15,23 @@ from HapticSharedControl.path_planning import *
 from HapticSharedControl.simulation import *
 from HapticSharedControl.wheel_control import *
 
-with open("../data/driving_path_left2right.txt", "r") as f:
+with open("../data/paths/driving_path_left2right.txt", "r") as f:
     data_left2right = f.readlines()
     data_left2right = [line.strip().split(",") for line in data_left2right]
     data_left2right = [[float(val) for val in line] for line in data_left2right]
     data_left2right = np.array(data_left2right)
+
+with open("../data/paths/driving_path_right2left.txt", "r") as f:
+    data_right2left = f.readlines()
+    data_right2left = [line.strip().split(",") for line in data_right2left]
+    data_right2left = [[float(val) for val in line] for line in data_right2left]
+    data_right2left = np.array(data_right2left)
+
+with open("../data/paths/hitachi.txt", "r") as f:
+    data_hitachi = f.readlines()
+    data_hitachi = [line.strip().split(",") for line in data_hitachi]
+    data_hitachi = [[float(val) for val in line] for line in data_hitachi]
+    data_hitachi = np.array(data_hitachi)
 
 
 predefined_path = {
@@ -27,9 +39,9 @@ predefined_path = {
         "P_0": [-1.47066772, -13.22415039],
         "P_d": [-0.37066772, -29.02415039],
         "P_f": [-6.87066772, -21.62415039],
-        "yaw_0": 0,
-        "yaw_d": 10,
-        "yaw_f": 90,
+        "yaw_0": 90 - (-90),
+        "yaw_d": 90 - (-80),
+        "yaw_f": 90 - 0,
         "forward paths": None,
         "backward paths": None,
     },
@@ -37,11 +49,31 @@ predefined_path = {
         "P_0": [-2.376371583333333, -13.749357381666668],
         "P_d": [-0.566469992644628, -27.297582133636364],
         "P_f": [-7.7486732, -21.271947543333333],
-        "yaw_0": 1.0237121333333334,
-        "yaw_d": 27.831170400000005,
-        "yaw_f": 91.95542591499999,
+        "yaw_0": 90 - (88.97628786666667),
+        "yaw_d": 90 - (62.168829599999995),
+        "yaw_f": 90 - (-1.9554259149999922),
         "forward paths": process_exist_path(data_left2right[:40]),
         "backward paths": process_exist_path(data_left2right[40:]),
+    },
+    "2": {
+        "P_0": [-2.284308814, -31.734065629999996],
+        "P_d": [0.409550333177305, -18.459612079588652],
+        "P_f": [-7.449310874, -21.459648512],
+        "yaw_0": 90 - (-88.9748993),
+        "yaw_d": 90 - (-38.76474382600003),
+        "yaw_f": 90 - (1.296984835999993),
+        "forward paths": process_exist_path(data_right2left[:46]),
+        "backward paths": process_exist_path(data_right2left[46:]),
+    },
+    "3": {
+        "P_0": [],
+        "P_d": [1.035116, -18.325821],
+        "P_f": [-7.685114, -21.214608],
+        "yaw_0": None,
+        "yaw_d": 90 - (50),
+        "yaw_f": 90 - (0),
+        "forward paths": [],
+        "backward paths": process_exist_path(data_hitachi),
     },
 }
 
@@ -152,6 +184,8 @@ def main():
         # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
         if dist(position_to_world, predefined_path["1"]["P_0"]) < 1:
             param = predefined_path["1"]["forward paths"]
+            if np.sqrt((90 + vehicle_yaw)):
+                pass
             take_control = True
 
         # 4. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
