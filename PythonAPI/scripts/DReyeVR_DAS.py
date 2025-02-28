@@ -184,14 +184,24 @@ def main():
         # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
         if dist(position_to_world, predefined_path["1"]["P_0"]) < 1:
             param = predefined_path["1"]["forward paths"]
-            if np.sqrt((90 + vehicle_yaw)):
-                pass
-            take_control = True
+            if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
+                take_control = True
+            else:
+                if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
+                    print("Please turn the vehicle to the right")
+                else:
+                    print("Please turn the vehicle to the left")
 
         # 4. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
         if dist(position_to_world, predefined_path["1"]["P_d"]) < 1:
             param = predefined_path["1"]["backward paths"]
-            take_control = True
+            if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
+                take_control = True
+            else:
+                if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
+                    print("Please turn the vehicle to the right")
+                else:
+                    print("Please turn the vehicle to the left")
 
         if take_control:
             haptic_control = HapticSharedControl(
