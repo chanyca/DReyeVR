@@ -85,6 +85,9 @@ def simulation(
 
 def plot_trajectory(paths, trajectories, yaw_angles_deg, recorded_path=None):
     # Extract trajectory points
+    paths.remove(None)
+    trajectories.remove(None)
+    yaw_angles_deg.remove(None)
 
     colors = ["red", "green", "orange"]
     # Plot the trajectory

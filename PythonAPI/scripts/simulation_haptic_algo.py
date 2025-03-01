@@ -114,80 +114,104 @@ elif trial == "12":
     yaw_0 = 177.7886658
     yaw_d = 147.1214333
     yaw_f = 89.86245729
+elif trial == "13":
+    P_0 = []
+    P_d = [1.035116, -18.325821]
+    P_f = [-7.685114, -21.214608]
+    yaw_0 = None
+    yaw_d = 90 - (-50)
+    yaw_f = 90 - (0)
 else:
     print("Invalid trial number")
     exit()
 
-if trial != "0":
+if trial != "0" and trial != "13":
     df = pd.read_excel(f"{__file_path__.parent}/data/trials/trial{trial}.xlsx")
     x = df["LocationX"].to_list()
     y = df["LocationY"].to_list()
     yaw = df["RotationYaw"].to_list()
+elif trial == "13":
+    with open(f"{__file_path__.parent}/data/paths/hitachi.txt", "r") as f:
+        data_hitachi = f.readlines()
+        data_hitachi = [line.strip().split(",") for line in data_hitachi]
+        data_hitachi = [[float(val) for val in line] for line in data_hitachi]
+        data_hitachi = np.array(data_hitachi)
+    x = data_hitachi[:, 0]
+    y = data_hitachi[:, 1]
+    yaw = None
 else:
     x = [P_0[0], P_d[0], P_f[0]]
     y = [P_0[1], P_d[1], P_f[1]]
     yaw = [yaw_0, yaw_d, yaw_f]
 recorded_path = np.array([x, y])
 
+# Simulation Parameters
 # calculate the bezier path
-print("Calculating Bezier Path")
 
 n_points = 50
-path1, control_points1, params1 = calculate_bezier_trajectory(
-    start_pos=P_0[::-1],
-    end_pos=P_d[::-1],
-    start_yaw=yaw_0,
-    end_yaw=yaw_d,
-    n_points=n_points,
-    turning_radius=R,
-    show_animation=False,
-)
-# backward so reverse the yaw angle (+180)
-path2, control_points2, params2 = calculate_bezier_trajectory(
-    start_pos=P_d[::-1],
-    end_pos=P_f[::-1],
-    start_yaw=180 + yaw_d,
-    end_yaw=180 + yaw_f,
-    n_points=n_points,
-    turning_radius=R,
-    show_animation=False,
-)
 
-# Simulation Parameters
-n_steps = None
-speed = 1
-init_steering_angle = 10  # abs value
+n_steps = 30
+speed = 0.5
+init_steering_angle = 20  # abs value
 
-# Run the simulation
-path1, trajectory1, yaw_angles_deg1 = simulation(
-    path=path1,
-    param=params1,
-    i_points=P_0[::-1],
-    f_points=P_d[::-1],
-    i_yaw=180 - yaw_0,
-    speed=1 * speed,
-    init_steering_angle=1 * init_steering_angle,
-    vehicle_config=vehicle_config,
-    n_steps=n_steps,
-)
+if (P_0 != [] and yaw_0 is not None) and (P_d != [] and yaw_d is not None):
+    path1, control_points1, params1 = calculate_bezier_trajectory(
+        start_pos=P_0[::-1],
+        end_pos=P_d[::-1],
+        start_yaw=yaw_0,
+        end_yaw=yaw_d,
+        n_points=n_points,
+        turning_radius=R,
+        show_animation=False,
+    )
+    # Run the simulation
+    path1, trajectory1, yaw_angles_deg1 = simulation(
+        path=path1,
+        param=params1,
+        i_points=P_0[::-1],
+        f_points=P_d[::-1],
+        i_yaw=180 - yaw_0,
+        speed=1 * speed,
+        init_steering_angle=1 * init_steering_angle,
+        vehicle_config=vehicle_config,
+        n_steps=n_steps,
+    )
+else:
+    path1 = None
+    trajectory1 = None
+    yaw_angles_deg1 = None
 
 
-path2, trajectory2, yaw_angles_deg2 = simulation(
-    path=path2,
-    param=params2,
-    i_points=P_d[::-1],
-    f_points=P_f[::-1],
-    i_yaw=180 - yaw_d,
-    speed=-1 * speed,
-    init_steering_angle=-1 * init_steering_angle,
-    vehicle_config=vehicle_config,
-    n_steps=n_steps,
-)
+if (P_d != [] and yaw_d is not None) and (P_f != [] and yaw_f is not None):
+    # backward so reverse the yaw angle (+180)
+    path2, control_points2, params2 = calculate_bezier_trajectory(
+        start_pos=P_d[::-1],
+        end_pos=P_f[::-1],
+        start_yaw=180 + yaw_d,
+        end_yaw=180 + yaw_f,
+        n_points=n_points,
+        turning_radius=R,
+        show_animation=False,
+    )
 
-# trajectory = np.concatenate((trajectory1, trajectory2[:]), axis=0)
-# yaw_angles_deg = np.concatenate((yaw_angles_deg1, yaw_angles_deg2[:]), axis=0)
-# path = np.concatenate((path1, path2[1:]), axis=0)
+    # Run the simulation
+    path2, trajectory2, yaw_angles_deg2 = simulation(
+        path=path2,
+        param=params2,
+        i_points=P_d[::-1],
+        f_points=P_f[::-1],
+        i_yaw=180 - yaw_d,
+        speed=-1 * speed,
+        init_steering_angle=-1 * init_steering_angle,
+        vehicle_config=vehicle_config,
+        n_steps=n_steps,
+    )
+else:
+    path2 = None
+    trajectory2 = None
+    yaw_angles_deg2 = None
 
+# Plot the trajectories
 plot_trajectory(
     paths=[path1, path2],
     trajectories=[trajectory1, trajectory2],
