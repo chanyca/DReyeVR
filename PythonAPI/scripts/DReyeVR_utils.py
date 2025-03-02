@@ -3,12 +3,14 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-import carla
 import numpy as np
+
+import carla
 
 sys.path.append(os.path.join(os.getenv("CARLA_ROOT"), "PythonAPI"))
 import examples  # calls ./__init__.py to add all the necessary things to path
 
+# cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg
 
 def find_ego_vehicle(world: carla.libcarla.World) -> Optional[carla.libcarla.Vehicle]:
     DReyeVR_vehicles: str = "harplab.dreyevr_vehicle.*"
@@ -89,7 +91,7 @@ class DReyeVRSensor:
             ]
         return obj
 
-    def update(self, data) -> None:
+    def update(self, data: dict) -> None:
         # update local variables
         elements: List[str] = [key for key in dir(data) if "__" not in key]
         for key in elements:
@@ -108,14 +110,14 @@ class DReyeVRSensor:
             [angular_velocity.x, angular_velocity.y, angular_velocity.z]
         )
         # wheel angles
-        wheel_locations = [
-            carla.VehicleWheelLocation.FL_Wheel,
-            carla.VehicleWheelLocation.FR_Wheel,
-            carla.VehicleWheelLocation.BL_Wheel,
-            carla.VehicleWheelLocation.BR_Wheel,
-        ]
-        for wheel in wheel_locations:
-            self.data[f"{wheel}_Angle"] = self.ego_vehicle.get_wheel_steer_angle(wheel)
+        wheel_locations = {
+            "FL_Wheel": carla.VehicleWheelLocation.FL_Wheel,
+            "FR_Wheel": carla.VehicleWheelLocation.FR_Wheel,
+            "BL_Wheel": carla.VehicleWheelLocation.BL_Wheel,
+            "BR_Wheel": carla.VehicleWheelLocation.BR_Wheel,
+        }
+        for key, wheel_name in wheel_locations.items():
+            self.data[f"{key}_Angle"] = float(self.ego_vehicle.get_wheel_steer_angle(wheel_name))
 
     @classmethod
     def spawn(cls, world: carla.libcarla.World):

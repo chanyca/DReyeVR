@@ -22,6 +22,9 @@ import numpy as np
 import pandas as pd
 from logidrivepy import LogitechController
 
+# Ignore spelling errors for any unknown words in this script
+# cspell:ignore logi logidrivepy DIJOYSTATE2 XINPUT_STATE IDirectInputEffect DIPROPRANGE
+
 MAX_ANGLE_RANGE = 900
 
 
@@ -44,7 +47,7 @@ class WheelController:
         )
 
     def play_spring_force(
-        self, offset_percentage, saturation_percentage=0.5, coefficient_percentage=1.0
+        self, offset_percentage, saturation_percentage=50, coefficient_percentage=100
     ):
         """
         Plays a spring force effect on the controller.
@@ -52,17 +55,17 @@ class WheelController:
         with the specified parameters. The spring force effect is used to simulate a
         spring-like resistance on the controller.
         Args:
-            offset_percentage (float): The offset percentage for the spring force effect.
-            saturation_percentage (float, optional): The saturation percentage for the spring force effect. Defaults to 0.5.
-            coefficient_percentage (float, optional): The coefficient percentage for the spring force effect. Defaults to 1.0.
+            offset_percentage (int): The offset percentage for the spring force effect (-100 -> 100).
+            saturation_percentage (int, optional): The saturation percentage for the spring force effect (0 -> 100). Defaults to 50.
+            coefficient_percentage (int, optional): The coefficient percentage for the spring force effect (0 -> 100). Defaults to 100.
         """
 
         self.controller.logi_update()  # update the controller state before any operation
         self.controller.play_spring_force(
             index=self.controller_index,
-            offset_percentage=offset_percentage,
-            saturation_percentage=saturation_percentage,
-            coefficient_percentage=coefficient_percentage,
+            offset_percentage=int(offset_percentage),
+            saturation_percentage=int(saturation_percentage),
+            coefficient_percentage=int(coefficient_percentage),
         )
 
     def stop_spring_force(self):

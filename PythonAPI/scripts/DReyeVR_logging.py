@@ -86,7 +86,7 @@ def main():
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
-    sync_mode = False  # synchronous mode
+    sync_mode = True  # synchronous mode
     np.random.seed(int(time.time()))
 
     if rospy is not None:
@@ -108,7 +108,8 @@ def main():
             msg: String = create_ros_msg(sensor)
             pub.publish(msg)  # publish to ros master
         pprint(sensor.data)  # more useful print here (contains all attributes)
-
+        time.sleep(2.0)
+        
     # subscribe to DReyeVR sensor
     sensor.ego_sensor.listen(publish_and_print)
     try:

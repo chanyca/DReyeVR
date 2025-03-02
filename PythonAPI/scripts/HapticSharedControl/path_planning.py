@@ -337,7 +337,12 @@ def process_exist_path(path):
         param: Dictionary containing the original path and computed tangent vectors
     """
     path = np.array(path)
-    param = {"path": path, "tangent": compute_tangents(path)}
+    param = {"path": path, 
+             "start_x": path[0][0],
+             "start_y": path[0][1],
+             "end_x": path[-1][0],
+             "end_y": path[-1][1],
+             "tangent": compute_tangents(path)}
 
     return param
 

@@ -48,13 +48,17 @@ class HapticSharedControl:
             "[Measured] Steering Wheel Angle ~ Theta(t) (degree)": [],
             "[Computed] Turning Radius ~ R(delta) (m)": [],
             "[Computed] Vehicle Steering Angle ~ Delta(t) (degree)": [],
+            "[Computed] Center of Rotation to WORLD (m)": {
+                "X": [],
+                "Y": [],
+            },
             "[Computed] Current Error to Trajectory ~ e(t)": [],
             "[Computed] Predicted Position (m)": {
                 "X": [],
                 "Y": [],
             },
             "[Computed] Change of Yaw Angle ~ Delta_phi(t) (degree)": [],
-            "[Computed] Center of Rotation to WORLD (m)": [],
+
             "[Computed] Predicted Yaw Angle ~ Phi_tp(t) (degree)": [],
             "[Computed] Predicted Error to Trajectory ~ eps_tp(t)": [],
             "[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (degree)": [],
@@ -93,20 +97,13 @@ class HapticSharedControl:
         self.phi = current_yaw_angle_deg
 
         # calculate the average steering angle and turning radius
-        self.turning_radius, self.vehicle_turning_angle_deg = self.vehicle.calc_turning_radius(
+        self.turning_radius, self.vehicle_steering_angle_deg, self.center_of_rotation_to_vehicle  = self.vehicle.calc_turning_radius(
             steering_angles_deg
-        )
-        self.vehicle_turning_angle_rad = np.radians(self.vehicle_turning_angle_deg)
-
-        # NOTE: In simulation, use bicycle model to calculate the turning radius
-        # suppose the steering wheel angle is the same as the vehicle steering angle
-        self.vehicle_steering_angle_deg = (
-            self.vehicle.inner_wheel_steering_angle_deg
-            + self.vehicle.outer_wheel_steering_angle_deg
-        ) / 2
+        ).values()
+        
         self.vehicle_steering_angle_rad = np.radians(self.vehicle_steering_angle_deg)
 
-        if not steering_wheel_angle_deg:
+        if steering_wheel_angle_deg is None:
             self.steering_wheel_angle_deg = self.translate_sa_to_swa(
                 self.vehicle_steering_angle_deg
             )
@@ -124,13 +121,15 @@ class HapticSharedControl:
         self.tau_das = -(self.Cs * self.e_t) * (self.vehicle_steering_angle_rad - self.theta_d_rad)
 
         coef = sigmoid(self.Cs * self.e_t)
-        desired_steering_angle_deg = np.degrees(self.theta_d_rad)
+        desired_steering_wheel_angle_deg = self.translate_sa_to_swa(np.degrees(
+            self.theta_d_rad)
+        )
 
         self.logging()
 
-        return self.tau_das, coef, desired_steering_angle_deg
+        return self.tau_das, coef, desired_steering_wheel_angle_deg
 
-    def preview_driver_model(self, current_position, current_yaw_angle_deg, method="complex"):
+    def preview_driver_model(self, current_position, current_yaw_angle_deg, method="simple"):
         """
         Predicts the desired steering angle based on the current position and yaw angle of the vehicle.
         Args:
@@ -186,12 +185,7 @@ class HapticSharedControl:
             np.sin(self.vehicle_steering_angle_rad)
         )  #  -1 if clockwise, 1 if counter-clockwise
 
-        center_of_rotation_to_vehicle = np.array(
-            [
-                self.vehicle.wheelbase / np.tan(self.vehicle_steering_angle_rad),
-                -center_of_mass,
-            ]
-        )
+        center_of_rotation_to_vehicle = self.center_of_rotation_to_vehicle
 
         # transform the vehicle coordinates to the global coordinates, rotate and shift
         self.center_of_rotation_to_world = rotation_matrix_cw(
@@ -213,12 +207,12 @@ class HapticSharedControl:
                 [
                     np.cos(
                         self.predict_yaw_angle_rad
-                        - self.vehicle_turning_angle_rad
+                        - self.vehicle_steering_angle_rad
                         + self.rotating_direction * np.pi / 2
                     ),
                     np.sin(
                         self.predict_yaw_angle_rad
-                        - self.vehicle_turning_angle_rad
+                        - self.vehicle_steering_angle_rad
                         + self.rotating_direction * np.pi / 2
                     ),
                 ]
@@ -242,8 +236,7 @@ class HapticSharedControl:
         # More robust distance calculation by checking multiple points
         min_dist = float("inf")
         closest_point, idx = find_closest_point(position, self.desired_trajectory)
-        print(f"[Algo] Closest Point Index of  {position}:", idx)
-
+        print(f"[Algo] Closest Point Index of  {position}:", idx, self.desired_trajectory[idx])
         return min(dist(position, closest_point), min_dist)
 
     def get_sign_of_error(self, position):
@@ -264,7 +257,8 @@ class HapticSharedControl:
         Returns:
             float: The steering wheel angle in degrees.
         """
-        return sa_deg
+        return linear_fn(slope=28.836080132923243, 
+                         intercept=-0.3699660038416528)(sa_deg)
 
     def translate_swa_to_sa(self, swa_deg):
         """
@@ -274,13 +268,14 @@ class HapticSharedControl:
         Returns:
             float: The steering angle in degrees.
         """
-        return swa_deg
+        return linear_fn(slope=0.034624741865409744,
+                         intercept=0.012729044962266822)(swa_deg)
 
     def logging(self):
         """
         Log the data for debugging purposes.
         """
-
+        print("\n=====================================")
         self.log_data["Time (t)"].append(time.time())
         self.log_data["[Measured] Current Position (m)"]["X"].append(self.r[0])
         self.log_data["[Measured] Current Position (m)"]["Y"].append(self.r[1])
@@ -293,23 +288,30 @@ class HapticSharedControl:
         )
         self.log_data["[Computed] Turning Radius ~ R(delta) (m)"].append(self.turning_radius)
         self.log_data["[Computed] Vehicle Steering Angle ~ Delta(t) (degree)"].append(
-            self.vehicle_turning_angle_deg
+            self.vehicle_steering_angle_deg
         )
         self.log_data["[Computed] Current Error to Trajectory ~ e(t)"].append(self.e_t)
         self.log_data["[Computed] Predicted Position (m)"]["X"].append(self.rtp[0])
         self.log_data["[Computed] Predicted Position (m)"]["Y"].append(self.rtp[1])
+        
         self.log_data["[Computed] Change of Yaw Angle ~ Delta_phi(t) (degree)"].append(
             self.delta_phi_deg
         )
-        self.log_data["[Computed] Center of Rotation to WORLD (m)"].append(
-            self.center_of_rotation_to_world
+        
+        self.log_data["[Computed] Center of Rotation to WORLD (m)"]["X"].append(
+            self.center_of_rotation_to_world[0]
         )
+        self.log_data["[Computed] Center of Rotation to WORLD (m)"]["Y"].append(
+            self.center_of_rotation_to_world[1]
+        )
+        
         self.log_data["[Computed] Predicted Yaw Angle ~ Phi_tp(t) (degree)"].append(
             self.predict_yaw_angle_deg
         )
         self.log_data["[Computed] Predicted Error to Trajectory ~ eps_tp(t)"].append(
             self.epsilon_tp_t
         )
+        
         self.log_data["[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (degree)"].append(
             self.theta_d_rad
         )
