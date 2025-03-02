@@ -1,20 +1,15 @@
 import argparse
-import csv
-import gc
-import os
 import sys
 import time
 from pprint import pprint
-from turtle import backward
 
+import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.simulation import *
 from HapticSharedControl.wheel_control import *
-
-import carla
 
 with open("../data/paths/driving_path_left2right.txt", "r") as f:
     data_left2right = f.readlines()
@@ -85,6 +80,7 @@ with open(f"{__file_path__}/HapticSharedControl/wheel_setting.json", "r") as f:
 vehicle = Vehicle(vehicle_config=vehicle_config)
 R = vehicle.minimum_turning_radius
 
+# using Bezier curve to generate the path for path 0
 n_points = 60
 _, _, param_fw = calculate_bezier_trajectory(
     start_pos=predefined_path["0"]["P_0"][::-1],
@@ -207,7 +203,7 @@ def main():
             #         print("Please turn the vehicle to the left")
             take_control = True
 
-        # 5. if take control, then start the self driving 
+        # 5. if take control, then start the self driving
         if take_control:
             haptic_control = HapticSharedControl(
                 Cs=0.5,
@@ -237,7 +233,7 @@ def main():
                 coefficient_percentage=100,
             )
             controller.stop_spring_force()
-            
+
             print("CURRENT POSITION: ", position_to_world)
             print("CURRENT YAW: ", vehicle_yaw)
             print("CURRENT SPEED: ", speed)

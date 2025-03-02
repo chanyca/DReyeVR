@@ -300,36 +300,45 @@ def get_tangent_vector(path, t_query, normalize=False):
     return tangent
 
 
+def compute_tangents(points):
+    tangents = []
+    n = len(points)
+
+    for i in range(n):
+        if i == 0:
+            # Tiếp tuyến tại điểm đầu tiên (sử dụng hiệu tiến)
+            dx, dy = points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1]
+        elif i == n - 1:
+            # Tiếp tuyến tại điểm cuối cùng (sử dụng hiệu lùi)
+            dx, dy = points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]
+        else:
+            # Tiếp tuyến tại điểm giữa (sử dụng hiệu trung tâm)
+            dx, dy = points[i + 1][0] - points[i - 1][0], points[i + 1][1] - points[i - 1][1]
+
+        # Tạo điểm đầu cuối cho đường tiếp tuyến
+        scale = 1  # Chiều dài của đoạn tiếp tuyến có thể tùy chỉnh
+        p1 = (points[i][0] - scale * dx, points[i][1] - scale * dy)
+        p2 = (points[i][0] + scale * dx, points[i][1] + scale * dy)
+
+        tangents.append((p1, p2))
+
+    return tangents
+
+
 def process_exist_path(path):
     """
-    Process an existing path consisting of a series of points and compute 
+    Process an existing path consisting of a series of points and compute
     tangent vectors at each point along the path.
-    
+
     Args:
         path: A list or numpy array of [x,y] coordinates that form a path
-        
+
     Returns:
         param: Dictionary containing the original path and computed tangent vectors
     """
     path = np.array(path)
-    param = {
-        "path": path,
-        "tangent": []
-    }
-    
-    # Check if path has enough points for spline interpolation
-    if len(path) < 4:
-        raise ValueError("Path must contain at least 4 points for cubic spline interpolation")
-    
-    diff_path = np.diff(path, axis=0)
-    dist_path = np.linalg.norm(diff_path, axis=1, keepdims=True)
-    
-    tangents = diff_path / dist_path
-    
-    tangents = np.concatenate([tangents[:1], tangents], axis=0)
-    
-    param["tangent"] = tangents
-    
+    param = {"path": path, "tangent": compute_tangents(path)}
+
     return param
 
 
