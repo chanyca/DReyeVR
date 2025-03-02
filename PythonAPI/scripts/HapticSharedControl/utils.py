@@ -23,15 +23,19 @@ def dist(p1, p2):
     return np.linalg.norm(p1 - p2)
 
 
-def find_closest_point(given_point, list_of_points):
+def find_closest_point(given_point, list_of_points, method="Brute"):
     # Convert list_of_points to a NumPy array for efficient processing
     points = np.array(list_of_points)
 
-    # Build a KD-Tree from the points
-    tree = KDTree(points)
+    if method == "KDTree":
+        # Build a KD-Tree from the points
+        tree = KDTree(points)
 
-    # Find the index of the nearest neighbor
-    _, nnidx = tree.query(given_point, k=1)
+        # Find the index of the nearest neighbor
+        _, nnidx = tree.query(given_point, k=1)
+    else:
+        # Find the index of the nearest neighbor
+        nnidx = np.argmin(np.linalg.norm(points - given_point, axis=1))
 
     # Return the closest point using the found index
     return list_of_points[nnidx], nnidx

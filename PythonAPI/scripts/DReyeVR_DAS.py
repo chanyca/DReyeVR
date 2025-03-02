@@ -7,13 +7,14 @@ import time
 from pprint import pprint
 from turtle import backward
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.simulation import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 with open("../data/paths/driving_path_left2right.txt", "r") as f:
     data_left2right = f.readlines()
@@ -149,7 +150,7 @@ def main():
     desired_steering_angles = []
 
     def control_loop(data):
-        global backward_btn_pressed_cnt
+        nonlocal backward_btn_pressed_cnt
 
         sensor.update(data)
         measured_carla_data = sensor.data
@@ -168,6 +169,7 @@ def main():
         buttons = controller.get_buttons_pressed()
         if any([btn_value for btn_value in list(buttons.values())[1:]]):
             backward_btn_pressed_cnt += 1
+            print("Backward button pressed")
 
         backward = backward_btn_pressed_cnt % 2 == 1
 
@@ -184,25 +186,28 @@ def main():
         # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
         if dist(position_to_world, predefined_path["1"]["P_0"]) < 1:
             param = predefined_path["1"]["forward paths"]
-            if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
-                take_control = True
-            else:
-                if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
-                    print("Please turn the vehicle to the right")
-                else:
-                    print("Please turn the vehicle to the left")
+            # if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
+            #     take_control = True
+            # else:
+            #     if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
+            #         print("Please turn the vehicle to the right")
+            #     else:
+            #         print("Please turn the vehicle to the left")
+            take_control = True
 
         # 4. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
         if dist(position_to_world, predefined_path["1"]["P_d"]) < 1:
             param = predefined_path["1"]["backward paths"]
-            if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
-                take_control = True
-            else:
-                if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
-                    print("Please turn the vehicle to the right")
-                else:
-                    print("Please turn the vehicle to the left")
+            # if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
+            #     take_control = True
+            # else:
+            #     if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
+            #         print("Please turn the vehicle to the right")
+            #     else:
+            #         print("Please turn the vehicle to the left")
+            take_control = True
 
+        # 5. if take control, then start the self driving 
         if take_control:
             haptic_control = HapticSharedControl(
                 Cs=0.5,
@@ -232,10 +237,22 @@ def main():
                 coefficient_percentage=100,
             )
             controller.stop_spring_force()
+            
+            print("CURRENT POSITION: ", position_to_world)
+            print("CURRENT YAW: ", vehicle_yaw)
+            print("CURRENT SPEED: ", speed)
+            print("CURRENT STEERING ANGLES: ", steering_angles)
+            print("CURRENT STEERING WHEEL ANGLE: ", steering_wheel_angle)
+            print("DESIRED STEERING ANGLE: ", desired_steering_angle_deg)
+        else:
+            distance_to_SP = dist(position_to_world, predefined_path["1"]["P_0"])
+            distance_to_DCP = dist(position_to_world, predefined_path["1"]["P_d"])
+            print(f"Distance to SP: {distance_to_SP}m", f" | Distance to DCP: {distance_to_DCP}m")
 
+        # 5. If vehicle reach the final point, stop the program
         if dist(position_to_world, predefined_path["1"]["P_f"]) < 1:
             print("Simulation Completed")
-            return
+            sys.exit()
 
         time.sleep(delta_t)
 

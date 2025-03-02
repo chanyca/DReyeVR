@@ -301,25 +301,35 @@ def get_tangent_vector(path, t_query, normalize=False):
 
 
 def process_exist_path(path):
-    # from exist path with N data points, get the start and end position, start and end
-    # and compute radius, tangent, normal, curvature_center at each point
+    """
+    Process an existing path consisting of a series of points and compute 
+    tangent vectors at each point along the path.
+    
+    Args:
+        path: A list or numpy array of [x,y] coordinates that form a path
+        
+    Returns:
+        param: Dictionary containing the original path and computed tangent vectors
+    """
+    path = np.array(path)
     param = {
         "path": path,
-        "control_points": None,
-        "tangent": [],
+        "tangent": []
     }
-    x = [p[0] for p in path]
-    y = [p[1] for p in path]
-
-    # Interpolate for smooth plotting
-    for t in np.linspace(0, 1, len(path)):
-        cs_x = CubicSpline(t, x)
-        cs_y = CubicSpline(t, y)
-        # Get point and tangent at t_query
-        point_x = cs_x(t)
-        point_y = cs_y(t)
-        tangent = get_tangent_vector(path, t, normalize=True)
-        param["tangent"].append(tangent)
+    
+    # Check if path has enough points for spline interpolation
+    if len(path) < 4:
+        raise ValueError("Path must contain at least 4 points for cubic spline interpolation")
+    
+    diff_path = np.diff(path, axis=0)
+    dist_path = np.linalg.norm(diff_path, axis=1, keepdims=True)
+    
+    tangents = diff_path / dist_path
+    
+    tangents = np.concatenate([tangents[:1], tangents], axis=0)
+    
+    param["tangent"] = tangents
+    
     return param
 
 
