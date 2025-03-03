@@ -99,7 +99,7 @@ class Vehicle:
             [self.max_steering_angle_inner_deg, self.max_steering_angle_outer_deg]
         )["R"]
 
-    def calc_turning_radius(self, steering_angles: tuple) -> list:
+    def calc_turning_radius(self, steering_angles: tuple) -> dict:
         """
         Calculate the turning radius and turning angle of the vehicle.
         This function calculates the turning radius and turning angle based on the steering angles of the inner and outer wheels.
@@ -158,7 +158,7 @@ class Vehicle:
 
         return {
             "R": np.abs(turning_radius),
-            "Delta:": np.degrees(vehicle_steering_angle),
+            "Delta": np.degrees(vehicle_steering_angle),
             "CoR": np.array(
                 [
                     self.center_of_mass / np.tan(vehicle_steering_angle),

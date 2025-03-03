@@ -3,13 +3,14 @@ import sys
 import time
 from pprint import pprint
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
-from HapticSharedControl.simulation import *
+from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
 
@@ -145,10 +146,13 @@ def main():
     ready = True
     take_control = False
 
-    delta_t = 1 / 20  # 1 second
+    delta_t = 1.0 / 60
 
     backward_btn_pressed_cnt = 0
-
+    
+    # TODO: Change the idx to the path you want to test
+    idx = "3"
+    
     param = None
     torques = []
     trajectory = []
@@ -159,7 +163,7 @@ def main():
 
     init_sa_swa = [[], []]
     coef = [[], []]
-
+    
     def control_loop(data: dict) -> None:
         """This function is called every time the sensor receives new data from the simulation.
 
@@ -169,6 +173,7 @@ def main():
 
         global vehicle
         global predefined_path
+        nonlocal idx
 
         nonlocal param
         nonlocal coef
@@ -195,7 +200,7 @@ def main():
 
             controller.play_spring_force(
                 offset_percentage=desired_offset,
-                saturation_percentage=100,
+                saturation_percentage=50,
                 coefficient_percentage=100,
             )
 
@@ -204,17 +209,12 @@ def main():
                 measured_carla_data["FL_Wheel_Angle"],
                 measured_carla_data["FR_Wheel_Angle"],
             ]  # front wheel angles
+            
             vehicle_steering_angle = vehicle.calc_turning_radius(steering_angles)["Delta"]
             init_sa_swa[0].append(vehicle_steering_angle)
             init_sa_swa[1].append(steering_wheel_angle)
 
             if len(init_sa_swa[0]) > 201:  # from -100 to 100
-                controller.play_spring_force(
-                    offset_percentage=0,
-                    saturation_percentage=100,
-                    coefficient_percentage=100,
-                )
-                controller.stop_spring_force()
 
                 x = np.array(init_sa_swa[0])
                 y = np.array(init_sa_swa[1])
@@ -242,16 +242,20 @@ def main():
 
             velocity = measured_carla_data["Velocity"][0:2]  # [x, y]
             speed = np.linalg.norm(velocity)
+            
             # get signal from Logitech Wheel SDK, if pressed the reverse button, then reverse the steering angle
             buttons = controller.get_buttons_pressed()
             if any([btn_value for btn_value in list(buttons.values())[1:]]):
                 backward_btn_pressed_cnt += 1
                 print("Backward button pressed")
-
+                
+            with open("log2_2.txt", "a") as f:
+                f.write(f"{position_to_world[0]},{position_to_world[1]},{vehicle_yaw},{speed}\n")
+                
             backward = backward_btn_pressed_cnt % 2 == 1
 
             speed *= -1 if backward else 1
-
+            
             # 2. get steering wheel angle
             steering_wheel_angle = controller.get_angle() * 450.0  # in degrees
             steering_angles = [
@@ -259,22 +263,22 @@ def main():
                 measured_carla_data["FR_Wheel_Angle"],
             ]  # front wheel angles
 
-            # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
-            if dist(position_to_world, predefined_path["1"]["P_0"]) < 2 and not take_control:
-                param = predefined_path["1"]["forward paths"]
-                # NOTE: Uncomment to control the vehicle to the correct direction
-                # if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
-                #     take_control = True
-                # else:
-                #     if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
-                #         print("Please turn the vehicle to the right")
-                #     else:
-                #         print("Please turn the vehicle to the left")
-                take_control = True
+            # # 3. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
+            # if dist(position_to_world, predefined_path[idx]["P_0"]) < 2 and not take_control:
+            #     param = predefined_path[idx]["forward paths"]
+            #     # NOTE: Uncomment to control the vehicle to the correct direction
+            #     # if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
+            #     #     take_control = True
+            #     # else:
+            #     #     if (90 - vehicle_yaw) - predefined_path["1"]["yaw_0"] > 0:
+            #     #         print("Please turn the vehicle to the right")
+            #     #     else:
+            #     #         print("Please turn the vehicle to the left")
+            #     take_control = True
 
             # 4. If vehicle enter the DCP zone notice the driver to pressed backward button, then when the button is pressed, plan the path and start the simulation
-            if dist(position_to_world, predefined_path["1"]["P_d"]) < 2 and not take_control:
-                param = predefined_path["1"]["backward paths"]
+            if dist(position_to_world, predefined_path[idx]["P_d"]) < 5 and not take_control:
+                param = predefined_path[idx]["backward paths"]
                 # NOTE: Uncomment to control the vehicle to the correct direction
                 # if abs((90 - vehicle_yaw) - predefined_path["1"]["yaw_0"]) < 5:
                 #     take_control = True
@@ -288,10 +292,10 @@ def main():
             # 5. if take control is allowed, then start the self driving
             if take_control:
                 haptic_control = HapticSharedControl(
-                    Cs=0.5,
-                    Kc=0.5,
-                    T=2,
-                    tp=1,
+                    # Cs=0.5,
+                    # Kc=0.5,
+                    # T=2,
+                    tp=2,
                     speed=speed,
                     desired_trajectory_params=param,
                     vehicle_config=vehicle_config,
@@ -302,7 +306,8 @@ def main():
                     current_yaw_angle_deg=vehicle_yaw,
                     steering_wheel_angle_deg=steering_wheel_angle,
                 )
-
+                desired_steering_angle_deg = np.clip(desired_steering_angle_deg, -450, 450)
+                
                 torques.append(torque)
                 trajectory.append(position_to_world)
                 steering_wheel_angles.append(steering_wheel_angle)
@@ -321,15 +326,14 @@ def main():
                         )
                     )
                     desired_offset = int(desired_offset_deg * 100 / 450.0)
-
+                # desired_offset = - 60
                 print(f"--> Desired Offset: {desired_offset}")
                 controller.play_spring_force(
                     offset_percentage=desired_offset,
-                    saturation_percentage=100,
+                    saturation_percentage=50,
                     coefficient_percentage=100,
                 )
-                controller.stop_spring_force()
-
+                
             else:
                 distance_to_SP = dist(position_to_world, predefined_path["1"]["P_0"])
                 distance_to_DCP = dist(position_to_world, predefined_path["1"]["P_d"])
@@ -340,11 +344,12 @@ def main():
 
             # 6. If vehicle reach the final point, stop the program
             if dist(position_to_world, predefined_path["1"]["P_f"]) < 1:
+                controller.stop_spring_force()
                 print("Simulation Completed")
+                
                 sys.exit()
 
             time.sleep(delta_t)
-
         except Exception as e:
             print("Error: ", repr(e))
             # sys.exit()

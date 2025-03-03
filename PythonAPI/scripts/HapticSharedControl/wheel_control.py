@@ -344,7 +344,7 @@ def spin_controller_forward_reverse_test(controller) -> None:
                 coefficient_percentage=100,
             )
 
-            time.sleep(0.8)
+            time.sleep(0.5)
             state = controller.get_state_engines()
 
             # export to csv
@@ -410,6 +410,6 @@ def test_controller():
 
 
 if __name__ == "__main__":
-    # spin_test()
-    test_controller()
+    spin_test()
+    # test_controller()
     print("Done.")

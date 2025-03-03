@@ -1,3 +1,5 @@
+import csv
+import datetime
 import time
 from pprint import pprint
 
@@ -5,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .utils import *
+
+__current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 class HapticSharedControl:
@@ -60,7 +64,10 @@ class HapticSharedControl:
             "[Computed] Change of Yaw Angle ~ Delta_phi(t) (degree)": [],
             "[Computed] Predicted Yaw Angle ~ Phi_tp(t) (degree)": [],
             "[Computed] Predicted Error to Trajectory ~ eps_tp(t)": [],
+            
+            "[Computed] Desired Steering Angle ~ Delta_d(t) (degree)": [],
             "[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (degree)": [],
+            
             "[Computed] Torque applied ~ Tau_das (N.m)": [],
         }
 
@@ -95,7 +102,7 @@ class HapticSharedControl:
         self.deltas = steering_angles_deg
         self.phi = current_yaw_angle_deg
 
-        # calculate the average steering angle and turning radius
+        #*1 calculate the average steering angle and turning radius
         (
             self.turning_radius,
             self.vehicle_steering_angle_deg,
@@ -103,28 +110,35 @@ class HapticSharedControl:
         ) = self.vehicle.calc_turning_radius(steering_angles_deg).values()
 
         self.vehicle_steering_angle_rad = np.radians(self.vehicle_steering_angle_deg)
-        # print("Center of Rotation to Vehicle:", self.center_of_rotation_to_vehicle)
-
+        
+        # Check if the steering wheel angle is provided, otherwise use the vehicle steering angle        
         if steering_wheel_angle_deg is None:
             self.steering_wheel_angle_deg = self.translate_sa_to_swa(
                 self.vehicle_steering_angle_deg
             )
         else:
             self.steering_wheel_angle_deg = steering_wheel_angle_deg
-
-        # Calculate the error of current position to the desired trajectory
+            
+        self.steering_wheel_angle_rad = np.radians(self.steering_wheel_angle_deg)
+        
+        #*2 Calculate the error of current position to the desired trajectory
         self.e_t = self.distance_to_trajectory(current_position)
 
-        # Calculate the previewed driver model
-        self.theta_d_rad = self.preview_driver_model(current_position, current_yaw_angle_deg)
-
-        # Calculate the torque
-
-        self.tau_das = -(self.Cs * self.e_t) * (self.vehicle_steering_angle_rad - self.theta_d_rad)
-
+        #*3 Calculate the previewed driver model
+        self.delta_d_rad = self.preview_driver_model(current_position, current_yaw_angle_deg)
+        self.delta_d_deg = np.degrees(self.delta_d_rad)
+        
+        #*4 convert the steering angle to the steering wheel angle
+        self.theta_d_deg = self.translate_sa_to_swa(self.delta_d_deg)
+        self.theta_d_rad = np.radians(self.theta_d_deg)
+        
+        #*5 Calculate the torque
+        self.tau_das = -(self.Cs * self.e_t) * (self.steering_wheel_angle_rad - self.theta_d_rad)
+        # Calculate the coefficient based on the sigmoid function
         coef = sigmoid(self.Cs * self.e_t)
-        desired_steering_wheel_angle_deg = self.translate_sa_to_swa(np.degrees(self.theta_d_rad))
+        desired_steering_wheel_angle_deg = self.theta_d_deg
 
+        # Log the data for debugging
         self.logging()
 
         return self.tau_das, coef, desired_steering_wheel_angle_deg
@@ -142,7 +156,9 @@ class HapticSharedControl:
         """
 
         # Predict the position of the vehicle at the preview time
-        self.rtp = self.predict_position(current_position, current_yaw_angle_deg)
+        self.rtp = self.predict_position(current_position=current_position, 
+                                         current_yaw_angle_deg=current_yaw_angle_deg, 
+                                         vehicle_steering_angle_deg=self.vehicle_steering_angle_deg)
 
         # Calculate the error between desired trajectory and predicted position with tp[s] ahead
         self.epsilon_tp_t = self.distance_to_trajectory(self.rtp) * self.get_sign_of_error(
@@ -151,22 +167,25 @@ class HapticSharedControl:
 
         # Calculate the desired steering angle
         if method == "simple":
-            theta_d = self.Kc * self.epsilon_tp_t + self.vehicle_steering_angle_rad
+            delta_d = self.Kc * self.epsilon_tp_t + self.vehicle_steering_angle_rad
         else:
-            theta_d_curr = self.vehicle_steering_angle_rad
-            theta_d_next = None
-            update_frequency = 100  # 100 Hz
-            delta_t = 1 / update_frequency  # 0.01 s
+            delta_d_curr = self.vehicle_steering_angle_rad
+            delta_d_next = None
+            update_frequency = 60  # 100 Hz
+            d_t = 1 / update_frequency  # 0.01 s
             for _ in range(update_frequency):
-                theta_d_next = (
-                    self.Kc * self.epsilon_tp_t + ((self.T / delta_t) - 1) * theta_d_curr
-                ) * (delta_t / self.T)
-                theta_d_curr = theta_d_next
-            theta_d = theta_d_next
+                delta_d_next = (
+                    self.Kc * self.epsilon_tp_t + ((self.T / d_t) - 1) 
+                    * delta_d_curr) * (d_t / self.T)
+                delta_d_curr = delta_d_next
+            delta_d = delta_d_next
 
-        return theta_d
+        return delta_d
 
-    def predict_position(self, current_position, current_yaw_angle_deg):
+    def predict_position(self, 
+                         current_position:list, 
+                         current_yaw_angle_deg:float, 
+                         vehicle_steering_angle_deg:float) -> list:
         """
         Predicts the future position of the vehicle based on the current position and yaw angle.
         Args:
@@ -177,22 +196,32 @@ class HapticSharedControl:
         """
 
         current_yaw_angle_rad = np.radians(current_yaw_angle_deg)
-
+        vehicle_steering_angle_rad = np.radians(vehicle_steering_angle_deg)
+        
         # vehicle coordinates, origin at the center of mass
-        self.rotating_direction = np.sin(self.vehicle_steering_angle_rad) / np.abs(
-            np.sin(self.vehicle_steering_angle_rad)
+        # define rotation direction for the vehicle
+        #TODO (fixme): Check if the center of rotation is correct, from left to right and from right to left
+        self.rotating_direction = np.sin(vehicle_steering_angle_rad) / np.abs(
+            np.sin(vehicle_steering_angle_rad)
         )  #  -1 if clockwise, 1 if counter-clockwise
-
+        
+        # First calculate the center of rotation to the vehicle
         center_of_rotation_to_vehicle = self.center_of_rotation_to_vehicle
 
-        # transform the vehicle coordinates to the global coordinates, rotate and shift
+        #*1 transform the vehicle coordinates to the global coordinates
+        # -- rotate current_yaw_angle_rad - np.pi / 2
+        # -- shift with vector current_position
         self.center_of_rotation_to_world = rotation_matrix_cw(
             current_yaw_angle_rad - np.pi / 2
-        ).dot(center_of_rotation_to_vehicle) + np.array(current_position)
+        ).dot(center_of_rotation_to_vehicle) 
+        + np.array(current_position) 
 
-        # calculate the predicted position
+        #*2 calculate the predicted position
+        # -- calculate the delta_phi_rad
+        # -- calculate the predicted yaw angle
+        # -- calculate the predicted position
+        
         self.delta_phi_rad = self.rotating_direction * self.speed * self.tp / self.turning_radius
-        # self.delta_phi_rad = - self.angular_speed * self.tp
         self.delta_phi_deg = np.degrees(self.delta_phi_rad)
 
         self.predict_yaw_angle_rad = current_yaw_angle_rad - self.delta_phi_rad
@@ -205,12 +234,12 @@ class HapticSharedControl:
                 [
                     np.cos(
                         self.predict_yaw_angle_rad
-                        - self.vehicle_steering_angle_rad
+                        - vehicle_steering_angle_rad
                         + self.rotating_direction * np.pi / 2
                     ),
                     np.sin(
                         self.predict_yaw_angle_rad
-                        - self.vehicle_steering_angle_rad
+                        - vehicle_steering_angle_rad
                         + self.rotating_direction * np.pi / 2
                     ),
                 ]
@@ -234,7 +263,7 @@ class HapticSharedControl:
         # More robust distance calculation by checking multiple points
         min_dist = float("inf")
         closest_point, idx = find_closest_point(position, self.desired_trajectory)
-        print(f"[Algo] Closest Point Index of  {position}:", idx, closest_point)
+        # print(f"[Algo] Closest Point Index of  {position}:", idx, closest_point)
         return min(dist(position, closest_point), min_dist)
 
     def get_sign_of_error(self, position):
@@ -257,7 +286,7 @@ class HapticSharedControl:
         """
         # return linear_fn(slope=28.836080132923243,
         #                  intercept=-0.3699660038416528)(sa_deg)
-        return sa_deg
+        return linear_fn(0, 1)(sa_deg)
 
     def translate_swa_to_sa(self, swa_deg):
         """
@@ -267,7 +296,8 @@ class HapticSharedControl:
         Returns:
             float: The steering angle in degrees.
         """
-        return linear_fn(slope=0.034624741865409744, intercept=0.012729044962266822)(swa_deg)
+        return linear_fn(slope=0.034624741865409744, 
+                         intercept=0.012729044962266822)(swa_deg)
 
     def logging(self):
         """
@@ -309,9 +339,12 @@ class HapticSharedControl:
         self.log_data["[Computed] Predicted Error to Trajectory ~ eps_tp(t)"].append(
             self.epsilon_tp_t
         )
+        
+        self.log_data["[Computed] Desired Steering Angle ~ Delta_d(t) (degree)"].append(
+            self.delta_d_deg)
 
         self.log_data["[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (degree)"].append(
-            np.degrees(self.theta_d_rad)
+            self.theta_d_deg
         )
         self.log_data["[Computed] Torque applied ~ Tau_das (N.m)"].append(self.tau_das)
 
@@ -335,9 +368,14 @@ class HapticSharedControl:
         """
         Save the log data to a CSV file.
         """
-        with open("haptic_shared_control_log.csv", "a") as f:
-            for key, value in self.log_data.items():
-                f.write("%s,%s\n" % (key, value))
+        # TODO (fixme): Add the ability to save the log data to a CSV file
+        with open(f"./haptic_shared_control_log_{__current_time__}.csv", "a") as csvfile:
+            headers = list(self.log_data.keys())
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            writer.writeheader()
+            for i in range(len(self.log_data["Time (t)"])):
+                row = {key: value[i] for key, value in self.log_data.items()}
+                writer.writerow(row)
         pass
 
 
