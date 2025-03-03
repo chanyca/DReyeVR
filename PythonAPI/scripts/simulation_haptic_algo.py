@@ -134,8 +134,8 @@ recorded_path = np.array([x, y])
 
 n_points = 50
 
-n_steps = 30
-speed = 1
+n_steps = 10
+speed = 0.5
 init_steering_angle = 20  # abs value
 
 if (P_0 != [] and yaw_0 is not None) and (P_d != [] and yaw_d is not None):
@@ -267,17 +267,17 @@ predefined_path = {
         "backward paths": process_exist_path(data_hitachi),
     },
 }
-path, trajectory, yaw_angles_deg = simulation(
-    path=predefined_path["1"]["backward paths"]["path"],
-    param=predefined_path["1"]["backward paths"],
-    i_points=predefined_path["1"]["P_d"][::-1],
-    f_points=predefined_path["1"]["P_f"][::-1],
-    i_yaw=180 - predefined_path["1"]["yaw_d"],
-    speed=-1 * speed,
-    init_steering_angle=-1 * init_steering_angle,
-    vehicle_config=vehicle_config,
-    n_steps=n_steps,
-)
+# path, trajectory, yaw_angles_deg = simulation(
+#     path=predefined_path["1"]["backward paths"]["path"],
+#     param=predefined_path["1"]["backward paths"],
+#     i_points=predefined_path["1"]["P_d"][::-1],
+#     f_points=predefined_path["1"]["P_f"][::-1],
+#     i_yaw=180 - predefined_path["1"]["yaw_d"],
+#     speed=-1 * speed,
+#     init_steering_angle=-1 * init_steering_angle,
+#     vehicle_config=vehicle_config,
+#     n_steps=n_steps,
+# )
 # plot_trajectory(
 #     paths=[path],
 #     trajectories=[trajectory],

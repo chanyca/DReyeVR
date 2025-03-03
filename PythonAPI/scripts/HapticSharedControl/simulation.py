@@ -41,8 +41,8 @@ def simulation(
     step = 0
     distances = [np.float("inf")]
     while True:
-        print("--------------------")
-        print("Step:", step)
+        print("=====================================")
+        print("\n>>> STEP:", step)
 
         torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
             current_position=current_position,
@@ -67,7 +67,7 @@ def simulation(
         step += 1
         if n_steps is not None and step >= n_steps:
             break
-        else:
+        elif n_steps is None:
             # consider the point as reached if the distance is less than 0.1
             dist_t = dist(current_position, f_points)
             if dist_t > distances[-1]:

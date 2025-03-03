@@ -103,6 +103,7 @@ class HapticSharedControl:
         ) = self.vehicle.calc_turning_radius(steering_angles_deg).values()
 
         self.vehicle_steering_angle_rad = np.radians(self.vehicle_steering_angle_deg)
+        # print("Center of Rotation to Vehicle:", self.center_of_rotation_to_vehicle)
 
         if steering_wheel_angle_deg is None:
             self.steering_wheel_angle_deg = self.translate_sa_to_swa(
@@ -233,7 +234,7 @@ class HapticSharedControl:
         # More robust distance calculation by checking multiple points
         min_dist = float("inf")
         closest_point, idx = find_closest_point(position, self.desired_trajectory)
-        print(f"[Algo] Closest Point Index of  {position}:", idx, self.desired_trajectory[idx])
+        print(f"[Algo] Closest Point Index of  {position}:", idx, closest_point)
         return min(dist(position, closest_point), min_dist)
 
     def get_sign_of_error(self, position):
@@ -272,7 +273,7 @@ class HapticSharedControl:
         """
         Log the data for debugging purposes.
         """
-        print("\n=====================================")
+        print("----------------------")
         self.log_data["Time (t)"].append(time.time())
         self.log_data["[Measured] Current Position (m)"]["X"].append(self.r[0])
         self.log_data["[Measured] Current Position (m)"]["Y"].append(self.r[1])
@@ -310,7 +311,7 @@ class HapticSharedControl:
         )
 
         self.log_data["[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (degree)"].append(
-            self.theta_d_rad
+            np.degrees(self.theta_d_rad)
         )
         self.log_data["[Computed] Torque applied ~ Tau_das (N.m)"].append(self.tau_das)
 

@@ -36,7 +36,6 @@ def find_closest_point(given_point, list_of_points, method="KDTree"):
     else:
         # Find the index of the nearest neighbor
         nnidx = np.argmin(np.linalg.norm(points - given_point, axis=1))
-
     # Return the closest point using the found index
     return list_of_points[nnidx], nnidx
 
@@ -162,7 +161,7 @@ class Vehicle:
             "Delta:": np.degrees(vehicle_steering_angle),
             "CoR": np.array(
                 [
-                    self.wheelbase / np.tan(vehicle_steering_angle),
+                    self.center_of_mass / np.tan(vehicle_steering_angle),
                     -self.center_of_mass,
                 ]
             ),

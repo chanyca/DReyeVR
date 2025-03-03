@@ -329,9 +329,9 @@ if __name__ == "__main__":
     vehicle = Vehicle(vehicle_config=vehicle_config)
     R = vehicle.minimum_turning_radius
 
-    P_0 = [-147.066772, -1322.415039]  # [y, x]
-    P_f = [-687.066772, -2162.415039]
-    P_d = [-37.066772, -2902.415039]
+    P_0 = [-1.47066772, -13.22415039]  # [x, y] in carla -> [y, x] in matplotlib
+    P_d = [-0.37066772, -29.02415039]
+    P_f = [-6.87066772, -21.62415039]
 
     yaw_0 = 90 + (-90)
     yaw_d = 90 + (-80)
@@ -347,6 +347,7 @@ if __name__ == "__main__":
         turning_radius=R,
         show_animation=False,
     )
+
     # backward so reverse the yaw angle (+180)
     path2, control_points2, params2 = calculate_bezier_trajectory(
         start_pos=P_d[::-1],
@@ -357,7 +358,7 @@ if __name__ == "__main__":
         turning_radius=R,
         show_animation=False,
     )
-
+    print(path2)
     # show 2 path in same plot
     plt.figure()
     plt.plot(path1.T[0], path1.T[1], label="Bezier Path 1")
