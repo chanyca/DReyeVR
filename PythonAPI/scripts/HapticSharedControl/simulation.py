@@ -33,7 +33,7 @@ def simulation(
 
     trajectory = [current_position]
     torques = []
-    steering_angles_deg = [init_steering_angle]
+    steering_angles_deg_list = [init_steering_angle]
 
     yaw_angles_deg = [i_yaw]  # if change sign of swa, change sign here
 
@@ -55,13 +55,12 @@ def simulation(
         torques.append(torque)
         trajectory.append(next_position)
 
-        steering_angles_deg.append(desired_steering_angle_deg)
+        steering_angles_deg_list.append(desired_steering_angle_deg)
         yaw_angles_deg.append(haptic_control.predict_yaw_angle_deg)
 
         s_angleL = np.clip(desired_steering_angle_deg, -47.95, 69.99)
         s_angleR = np.clip(desired_steering_angle_deg, -69.99, 47.95)
-        # s_angleL = desired_steering_angle_deg
-        # s_angleR = desired_steering_angle_deg
+
         i_yaw = haptic_control.predict_yaw_angle_deg
         current_position = next_position
 
@@ -74,7 +73,7 @@ def simulation(
             if dist_t > distances[-1]:
                 trajectory.pop(-1)
                 torques.pop(-1)
-                steering_angles_deg.pop(-1)
+                steering_angles_deg_list.pop(-1)
                 yaw_angles_deg.pop(-1)
                 print("Distance increased so stop the simulation")
                 break
@@ -85,9 +84,9 @@ def simulation(
 
 def plot_trajectory(paths, trajectories, yaw_angles_deg, recorded_path=None):
     # Extract trajectory points
-    paths.remove(None)
-    trajectories.remove(None)
-    yaw_angles_deg.remove(None)
+    # paths.remove(None)
+    # trajectories.remove(None)
+    # yaw_angles_deg.remove(None)
 
     colors = ["red", "green", "orange"]
     # Plot the trajectory
@@ -124,3 +123,4 @@ def plot_trajectory(paths, trajectories, yaw_angles_deg, recorded_path=None):
     plt.tight_layout()
     plt.axis("square")
     plt.show()
+    plt.close()

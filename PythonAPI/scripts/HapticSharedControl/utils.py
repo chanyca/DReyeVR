@@ -23,7 +23,7 @@ def dist(p1, p2):
     return np.linalg.norm(p1 - p2)
 
 
-def find_closest_point(given_point, list_of_points, method="Brute"):
+def find_closest_point(given_point, list_of_points, method="KDTree"):
     # Convert list_of_points to a NumPy array for efficient processing
     points = np.array(list_of_points)
 
@@ -95,7 +95,7 @@ class Vehicle:
 
         self.center_of_mass_ratio = self.vehicle_config["center_of_mass"]["x"]
         self.center_of_mass = self.wheelbase * self.center_of_mass_ratio
-        
+
         self.minimum_turning_radius = self.calc_turning_radius(
             [self.max_steering_angle_inner_deg, self.max_steering_angle_outer_deg]
         )["R"]
@@ -130,7 +130,7 @@ class Vehicle:
             # REF: https://www.theautopian.com/the-engineering-behind-why-some-cars-can-turn-tighter-than-others/
             steering_angle_rad = self.outer_wheel_steering_angle_rad
             steering_angle_rad += 1e-6 if steering_angle_rad % (np.pi) == 0 else 0
-            
+
             turning_radius = np.sqrt(
                 self.center_of_mass**2 + (self.wheelbase**2) / np.tan(steering_angle_rad) ** 2
             )
@@ -157,19 +157,21 @@ class Vehicle:
                 (self.center_of_mass**2) + (self.wheelbase**2) * (cot(turning_angle_rad) ** 2)
             )
 
-        return {"R": np.abs(turning_radius), 
-                "Delta:": np.degrees(vehicle_steering_angle), 
-                "CoR": np.array(
-                    [
-                        self.wheelbase / np.tan(vehicle_steering_angle),
-                        -self.center_of_mass,
-                    ]
-                )} 
-    
+        return {
+            "R": np.abs(turning_radius),
+            "Delta:": np.degrees(vehicle_steering_angle),
+            "CoR": np.array(
+                [
+                    self.wheelbase / np.tan(vehicle_steering_angle),
+                    -self.center_of_mass,
+                ]
+            ),
+        }
 
 
 def linear_fn(intercept, slope):
     return lambda x: slope * x + intercept
+
 
 if __name__ == "__main__":
     a = (5, 0)

@@ -272,51 +272,19 @@ def calculate_bezier_trajectory(
     return path, control_points, path_params
 
 
-def get_tangent_vector(path, t_query, normalize=False):
-    """Compute the tangent vector at a parameterized point t_query (0 to 1) on the path."""
-    # Separate x and y coordinates
-    x = np.array([p[0] for p in path])
-    y = np.array([p[1] for p in path])
-
-    # Parameterize the path (t from 0 to 1)
-    t = np.linspace(0, 1, len(path))
-
-    # Create cubic spline interpolation
-    cs_x = CubicSpline(t, x)
-    cs_y = CubicSpline(t, y)
-
-    # Compute derivatives (tangent components dx/dt, dy/dt)
-    dx_dt = cs_x(t_query, 1)  # First derivative of x
-    dy_dt = cs_y(t_query, 1)  # First derivative of y
-
-    tangent = np.array([dx_dt, dy_dt])
-
-    # Optionally normalize the tangent vector
-    if normalize:
-        norm = np.linalg.norm(tangent)
-        if norm > 0:  # Avoid division by zero
-            tangent = tangent / norm
-
-    return tangent
-
-
 def compute_tangents(points):
     tangents = []
     n = len(points)
 
     for i in range(n):
         if i == 0:
-            # Tiếp tuyến tại điểm đầu tiên (sử dụng hiệu tiến)
             dx, dy = points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1]
         elif i == n - 1:
-            # Tiếp tuyến tại điểm cuối cùng (sử dụng hiệu lùi)
             dx, dy = points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]
         else:
-            # Tiếp tuyến tại điểm giữa (sử dụng hiệu trung tâm)
             dx, dy = points[i + 1][0] - points[i - 1][0], points[i + 1][1] - points[i - 1][1]
 
-        # Tạo điểm đầu cuối cho đường tiếp tuyến
-        scale = 1  # Chiều dài của đoạn tiếp tuyến có thể tùy chỉnh
+        scale = 1
         p1 = (points[i][0] - scale * dx, points[i][1] - scale * dy)
         p2 = (points[i][0] + scale * dx, points[i][1] + scale * dy)
 
@@ -337,12 +305,14 @@ def process_exist_path(path):
         param: Dictionary containing the original path and computed tangent vectors
     """
     path = np.array(path)
-    param = {"path": path, 
-             "start_x": path[0][0],
-             "start_y": path[0][1],
-             "end_x": path[-1][0],
-             "end_y": path[-1][1],
-             "tangent": compute_tangents(path)}
+    param = {
+        "path": path,
+        "start_x": path[0][0],
+        "start_y": path[0][1],
+        "end_x": path[-1][0],
+        "end_y": path[-1][1],
+        "tangent": compute_tangents(path),
+    }
 
     return param
 

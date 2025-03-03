@@ -114,31 +114,15 @@ elif trial == "12":
     yaw_0 = 177.7886658
     yaw_d = 147.1214333
     yaw_f = 89.86245729
-elif trial == "13":
-    P_0 = []
-    P_d = [1.035116, -18.325821]
-    P_f = [-7.685114, -21.214608]
-    yaw_0 = None
-    yaw_d = 90 - (-50)
-    yaw_f = 90 - (0)
 else:
     print("Invalid trial number")
     exit()
 
-if trial != "0" and trial != "13":
+if trial != "0":
     df = pd.read_excel(f"{__file_path__.parent}/data/trials/trial{trial}.xlsx")
     x = df["LocationX"].to_list()
     y = df["LocationY"].to_list()
     yaw = df["RotationYaw"].to_list()
-elif trial == "13":
-    with open(f"{__file_path__.parent}/data/paths/hitachi.txt", "r") as f:
-        data_hitachi = f.readlines()
-        data_hitachi = [line.strip().split(",") for line in data_hitachi]
-        data_hitachi = [[float(val) for val in line] for line in data_hitachi]
-        data_hitachi = np.array(data_hitachi)
-    x = data_hitachi[:, 0]
-    y = data_hitachi[:, 1]
-    yaw = None
 else:
     x = [P_0[0], P_d[0], P_f[0]]
     y = [P_0[1], P_d[1], P_f[1]]
@@ -151,7 +135,7 @@ recorded_path = np.array([x, y])
 n_points = 50
 
 n_steps = 30
-speed = 0.5
+speed = 1
 init_steering_angle = 20  # abs value
 
 if (P_0 != [] and yaw_0 is not None) and (P_d != [] and yaw_d is not None):
@@ -181,6 +165,9 @@ else:
     trajectory1 = None
     yaw_angles_deg1 = None
 
+print("=====================================")
+print("=====================================")
+print("=====================================")
 
 if (P_d != [] and yaw_d is not None) and (P_f != [] and yaw_f is not None):
     # backward so reverse the yaw angle (+180)
@@ -218,3 +205,82 @@ plot_trajectory(
     yaw_angles_deg=[yaw_angles_deg1, yaw_angles_deg2],
     recorded_path=recorded_path,
 )
+#
+with open("../data/paths/driving_path_left2right.txt", "r") as f:
+    data_left2right = f.readlines()
+    data_left2right = [line.strip().split(",") for line in data_left2right]
+    data_left2right = [[float(val) for val in line] for line in data_left2right]
+    data_left2right = np.array(data_left2right)
+
+with open("../data/paths/driving_path_right2left.txt", "r") as f:
+    data_right2left = f.readlines()
+    data_right2left = [line.strip().split(",") for line in data_right2left]
+    data_right2left = [[float(val) for val in line] for line in data_right2left]
+    data_right2left = np.array(data_right2left)
+
+with open("../data/paths/hitachi.txt", "r") as f:
+    data_hitachi = f.readlines()
+    data_hitachi = [line.strip().split(",") for line in data_hitachi]
+    data_hitachi = [[float(val) for val in line] for line in data_hitachi]
+    data_hitachi = np.array(data_hitachi)
+
+
+predefined_path = {
+    "0": {
+        "P_0": [-1.47066772, -13.22415039],
+        "P_d": [-0.37066772, -29.02415039],
+        "P_f": [-6.87066772, -21.62415039],
+        "yaw_0": 90 - (-90),
+        "yaw_d": 90 - (-80),
+        "yaw_f": 90 - 0,
+        "forward paths": None,
+        "backward paths": None,
+    },
+    "1": {
+        "P_0": [-2.376371583333333, -13.749357381666668],
+        "P_d": [-0.566469992644628, -27.297582133636364],
+        "P_f": [-7.7486732, -21.271947543333333],
+        "yaw_0": 90 - (88.97628786666667),
+        "yaw_d": 90 - (62.168829599999995),
+        "yaw_f": 90 - (-1.9554259149999922),
+        "forward paths": process_exist_path(data_left2right[:40]),
+        "backward paths": process_exist_path(data_left2right[40:]),
+    },
+    "2": {
+        "P_0": [-2.284308814, -31.734065629999996],
+        "P_d": [0.409550333177305, -18.459612079588652],
+        "P_f": [-7.449310874, -21.459648512],
+        "yaw_0": 90 - (-88.9748993),
+        "yaw_d": 90 - (-38.76474382600003),
+        "yaw_f": 90 - (1.296984835999993),
+        "forward paths": process_exist_path(data_right2left[:46]),
+        "backward paths": process_exist_path(data_right2left[46:]),
+    },
+    "3": {
+        "P_0": [],
+        "P_d": [1.035116, -18.325821],
+        "P_f": [-7.685114, -21.214608],
+        "yaw_0": None,
+        "yaw_d": 90 - (50),
+        "yaw_f": 90 - (0),
+        "forward paths": [],
+        "backward paths": process_exist_path(data_hitachi),
+    },
+}
+path, trajectory, yaw_angles_deg = simulation(
+    path=predefined_path["1"]["backward paths"]["path"],
+    param=predefined_path["1"]["backward paths"],
+    i_points=predefined_path["1"]["P_d"][::-1],
+    f_points=predefined_path["1"]["P_f"][::-1],
+    i_yaw=180 - predefined_path["1"]["yaw_d"],
+    speed=-1 * speed,
+    init_steering_angle=-1 * init_steering_angle,
+    vehicle_config=vehicle_config,
+    n_steps=n_steps,
+)
+# plot_trajectory(
+#     paths=[path],
+#     trajectories=[trajectory],
+#     yaw_angles_deg=[yaw_angles_deg],
+#     recorded_path=None,
+# )
