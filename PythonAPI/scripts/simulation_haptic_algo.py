@@ -267,21 +267,21 @@ predefined_path = {
         "backward paths": process_exist_path(data_hitachi),
     },
 }
-idx = "1"
-path, trajectory, yaw_angles_deg = simulation(
-    path=predefined_path[idx]["backward paths"]["path"],
-    param=predefined_path[idx]["backward paths"],
-    i_points=predefined_path[idx]["P_d"][::-1],
-    f_points=predefined_path[idx]["P_f"][::-1],
-    i_yaw=180 - predefined_path[idx]["yaw_d"],
-    speed=-1 * speed,
-    init_steering_angle=-1 * init_steering_angle,
-    vehicle_config=vehicle_config,
-    n_steps=n_steps,
-)
-plot_trajectory(
-    paths=[path],
-    trajectories=[trajectory],
-    yaw_angles_deg=[yaw_angles_deg],
-    recorded_path=None,
-)
+# idx = "1"
+# path, trajectory, yaw_angles_deg = simulation(
+#     path=predefined_path[idx]["backward paths"]["path"],
+#     param=predefined_path[idx]["backward paths"],
+#     i_points=predefined_path[idx]["P_d"][::-1],
+#     f_points=predefined_path[idx]["P_f"][::-1],
+#     i_yaw=180 - predefined_path[idx]["yaw_d"],
+#     speed=-1 * speed,
+#     init_steering_angle=-1 * init_steering_angle,
+#     vehicle_config=vehicle_config,
+#     n_steps=n_steps,
+# )
+# plot_trajectory(
+#     paths=[path],
+#     trajectories=[trajectory],
+#     yaw_angles_deg=[yaw_angles_deg],
+#     recorded_path=None,
+# )

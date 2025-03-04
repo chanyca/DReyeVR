@@ -168,7 +168,8 @@ class Vehicle:
         }
 
 
-def linear_fn(intercept, slope):
+def linear_fn(slope, intercept):
+    # return y = slope * x + intercept
     return lambda x: slope * x + intercept
 
 
