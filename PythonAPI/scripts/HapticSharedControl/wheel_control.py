@@ -26,6 +26,7 @@ from logidrivepy import LogitechController
 # cspell:ignore logi logidrivepy DIJOYSTATE2 XINPUT_STATE IDirectInputEffect DIPROPRANGE
 
 MAX_ANGLE_RANGE = 900
+__current_time__ = time.time()
 
 
 class WheelController:
@@ -387,6 +388,64 @@ def spin_controller_forward_reverse_test(controller) -> None:
     print("Forward-reverse test done.")
     time.sleep(1)
     controller.exit()
+    
+def spin_controller_state_test(controller):
+    def spin_test(controller, offset, saturation_percentage, coefficient_percentage, time_step=0.01):
+        df = {}
+        print("--------------------")
+        controller.play_spring_force(
+            offset_percentage=int(offset),
+            saturation_percentage=int(saturation_percentage),
+            coefficient_percentage=int(coefficient_percentage),
+        )
+        if coefficient_percentage != 0:
+            sign = coefficient_percentage / abs(coefficient_percentage)
+        else:
+            sign = 1
+
+        print("Offset angle:", sign * (offset / 100) * (MAX_ANGLE_RANGE / 2))
+        error = abs((controller.get_angle()) - sign * (offset/ 100))
+        while error > 0.05 :
+            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
+            df.setdefault("Offset", []).append(offset)
+            df.setdefault("Saturation", []).append(saturation_percentage)
+            df.setdefault("Coefficient", []).append(coefficient_percentage)
+            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+            time.sleep(time_step)
+            error = abs((controller.get_angle()) - sign * (offset / 100))
+            print("Error:", error)
+            
+        print("Reach:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        # return to the center
+        print("Returning to center")
+        controller.play_spring_force(offset_percentage=0, 
+                                     saturation_percentage=80, 
+                                     coefficient_percentage=80)
+        return df
+    
+    data = {}
+    controller.play_spring_force(offset_percentage=0, 
+                                 saturation_percentage=80, 
+                                 coefficient_percentage=80)
+    time.sleep(1)
+    for sat in range(10, 101, 20):
+        for coef in range(-100, 101, 20):
+            if coef == 0:
+                continue          
+            for offset in range(-100, 101, 20):
+                print(f"> Offset: {offset}% \t| Saturation: {sat}% \t| Coefficient: {coef}%")
+                temp = spin_test(controller, offset, sat, coef, time_step=0.01) # 10ms
+                data = append_dict(data, temp)
+                time.sleep(1)
+                # temp_df = pd.DataFrame().from_dict(temp)
+                # temp_df.to_excel(f"spin_test_state_{offset}_{sat}_{coef}.xlsx", index=False)
+                
+    controller.stop_spring_force()
+    df = pd.DataFrame().from_dict(data)
+    df.to_excel("spin_test_state.xlsx", index=False)
+    print("State test done.")
+    time.sleep(1)
+    controller.exit()
 
 
 def append_dict(d1, d2):
@@ -397,8 +456,9 @@ def append_dict(d1, d2):
 
 def spin_test():
     controller = WheelController()
-    spin_controller_forward_reverse_test(controller)
+    # spin_controller_forward_reverse_test(controller)
     # spin_controller_full_test(controller)
+    spin_controller_state_test(controller)
     print("Spin test passed.\n")
 
 
