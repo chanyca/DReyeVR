@@ -394,19 +394,21 @@ def spin_controller_state_test(controller):
         df = {}
         print("--------------------")
         # *1 stay for a while
+        print("#1: Waiting for 2 seconds")
         start_time = time.time()
         while time.time() - start_time < 2:
             df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
+            df.setdefault("State", []).append("Waiting")
             df.setdefault("Offset", []).append(0)
             df.setdefault("Saturation", []).append(saturation_percentage)
             df.setdefault("Coefficient", []).append(coefficient_percentage)
             df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
             time.sleep(time_step)
-            
-        print("1st step completed in", time.time() - start_time, "seconds")
-        print("Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        print("---Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
         
-        # *2 play spring force to reach the angle
+        # *2 play spring force to reach the desired value
+        print("#2: Playing spring force to reach the desired value", offset)
+        # play spring force
         controller.play_spring_force(
             offset_percentage=int(offset),
             saturation_percentage=int(saturation_percentage),
@@ -418,11 +420,12 @@ def spin_controller_state_test(controller):
             sign = 1
 
         # reach the value
-        print("Offset angle:", sign * (offset / 100) * (MAX_ANGLE_RANGE / 2))
+        print("---Offset angle:", (offset / 100) * (MAX_ANGLE_RANGE / 2))
         error = abs((controller.get_angle() - sign * (offset/ 100)) * 450)
         start_time = time.time()
-        while error > 5: # 5 degree
+        while error > 1: # 1 degree
             df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
+            df.setdefault("State", []).append("Turning")
             df.setdefault("Offset", []).append(offset)
             df.setdefault("Saturation", []).append(saturation_percentage)
             df.setdefault("Coefficient", []).append(coefficient_percentage)
@@ -434,36 +437,43 @@ def spin_controller_state_test(controller):
                 print("Timeout...", "Error:", error)
                 break
 
-        print("Reach:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
-        print("2nd step completed in", time.time() - start_time, "seconds")
-        
-        
+        print("---Reach:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        print("---Completed in", time.time() - start_time, "seconds")
         
         # *3 stay for a while
+        print("#3: Waiting for 3 seconds to be stable")
         start_time = time.time()
         
-        while time.time() - start_time < 2:
+        while time.time() - start_time < 3:
             df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
+            df.setdefault("State", []).append("Stabilizing")
             df.setdefault("Offset", []).append(offset)
             df.setdefault("Saturation", []).append(saturation_percentage)
             df.setdefault("Coefficient", []).append(coefficient_percentage)
             df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
             time.sleep(time_step)
         
-        print("3rd step completed in", time.time() - start_time, "seconds")
-        print("Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        print("---Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
         
         # *4 return to the center
-        print("Returning to center")
+        print("#4: Returning to center")
         
-        controller.play_spring_force(offset_percentage=0, 
-                                     saturation_percentage=100, 
-                                     coefficient_percentage=(-sign)*100) # reverse side
+        controller.play_spring_force(offset_percentage=int(0), 
+                                     saturation_percentage=int(100), 
+                                     coefficient_percentage=int((sign)*coefficient_percentage)) # reverse side
+        #NOTE: sign of turning direction coef = sign of reversing direction coef
+        
         start_time = time.time()
         while time.time() - start_time < 3:
-            pass
+            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
+            df.setdefault("State", []).append("Centering")
+            df.setdefault("Offset", []).append(offset)
+            df.setdefault("Saturation", []).append(saturation_percentage)
+            df.setdefault("Coefficient", []).append(coefficient_percentage)
+            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+            time.sleep(time_step)
 
-        print("Return angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        print("---Return to angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
         return df
     
     # === Test ===
@@ -472,21 +482,25 @@ def spin_controller_state_test(controller):
                                  saturation_percentage=100, 
                                  coefficient_percentage=100)
     time.sleep(3)
+    coef_range = [-100, 100]
+    offset_range = [-100, 100]
+    sat_range = [10, 100]
     
-    for coef in range(-100, 101, 20):
-        if coef == 0:
-            continue          
-        for offset in range(-100, 101, 50):
-            if offset == 0:
-                continue
-            for sat in range(10, 101, 10):
+    for offset in range(offset_range[0], offset_range[-1] + 1, 20):
+        if offset == 0:
+            continue
+        for coef in range(coef_range[0], coef_range[-1] + 1, 20):
+            if coef == 0:
+                continue          
+            for sat in range(sat_range[0], sat_range[-1] + 1, 10):
                 print(f"\n>> Offset: {offset}% \t| Saturation: {sat}% \t| Coefficient: {coef}%")
                 temp = spin_test(controller, offset, sat, coef, time_step=0.001) # 10ms
                 data = append_dict(data, temp)
                 time.sleep(3.0)
-                # temp_df = pd.DataFrame().from_dict(temp)
-                # temp_df.to_excel(f"spin_test_state_{offset}_{sat}_{coef}.xlsx", index=False)
-    controller.stop_spring_force()
+   
+    controller.stop_spring_force() 
+    
+    
     df = pd.DataFrame().from_dict(data)
     df.to_excel("spin_test_stat_2.xlsx", index=False)
     print("State test done.")
