@@ -103,17 +103,18 @@ def main():
     
     # Note: set the vehicle speed to be stable
     vehicle = find_ego_vehicle(world)
-    vehicle.set_target_velocity(carla.Vector3D(x=1.0, y =0.0, z=0.0))  # stop the vehicle
+     # stop the vehicle
 
 
     def publish_and_print(data):
         # global df
+        vehicle.set_target_velocity(carla.Vector3D(x=1.0, y =0.0, z=0.0))
         sensor.update(data)
         if rospy is not None:
             msg: String = create_ros_msg(sensor)
             pub.publish(msg)  # publish to ros master
         pprint(sensor.data)  # more useful print here (contains all attributes)
-        time.sleep(2.0)
+        time.sleep(0.1)
 
     # subscribe to DReyeVR sensor
     sensor.ego_sensor.listen(publish_and_print)

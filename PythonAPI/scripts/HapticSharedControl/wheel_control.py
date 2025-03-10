@@ -341,11 +341,11 @@ def spin_controller_forward_reverse_test(controller) -> None:
             # play spring force
             controller.play_spring_force(
                 offset_percentage=offset,
-                saturation_percentage=50,
+                saturation_percentage=100,
                 coefficient_percentage=100,
             )
 
-            time.sleep(0.5)
+            time.sleep(2.0)
             state = controller.get_state_engines()
 
             # export to csv
@@ -359,32 +359,32 @@ def spin_controller_forward_reverse_test(controller) -> None:
 
     data = {}
     print("\nForward test")
-    temp = spin_test(controller, range_=(-100, 100), step=10, forward=True)
+    temp = spin_test(controller, range_=(-100, 100), step=20, forward=True)
     controller.stop_spring_force()
     time.sleep(3)
     data = append_dict(data, temp)
 
     print("\nReverse test")
-    temp = spin_test(controller, range_=(-100, 100), step=10, forward=False)
+    temp = spin_test(controller, range_=(-100, 100), step=20, forward=False)
     controller.stop_spring_force()
     time.sleep(3)
     data = append_dict(data, temp)
 
     print("\nForward test")
-    temp = spin_test(controller, range_=(-100, 100), step=10, forward=True)
+    temp = spin_test(controller, range_=(-100, 100), step=20, forward=True)
     controller.stop_spring_force()
     time.sleep(3)
     data = append_dict(data, temp)
 
     print("\nReverse test")
-    temp = spin_test(controller, range_=(-100, 100), step=10, forward=False)
+    temp = spin_test(controller, range_=(-100, 100), step=20, forward=False)
     controller.stop_spring_force()
     time.sleep(3)
     data = append_dict(data, temp)
 
     # export to excel
     df = pd.DataFrame().from_dict(data)
-    df.to_excel("./data/wheel_logs/spin_test_offset_forward.xlsx", index=False)
+    df.to_excel("spin_test_offset_forward0.xlsx", index=False)
     print("Forward-reverse test done.")
     time.sleep(1)
     controller.exit()
@@ -511,9 +511,9 @@ def append_dict(d1, d2):
 
 def spin_test():
     controller = WheelController()
-    # spin_controller_forward_reverse_test(controller)
+    spin_controller_forward_reverse_test(controller)
     # spin_controller_full_test(controller)
-    spin_controller_state_test(controller)
+    # spin_controller_state_test(controller)
     print("Spin test passed.\n")
 
 
