@@ -1,5 +1,6 @@
 import csv
 import datetime
+import os
 import time
 from pprint import pprint
 
@@ -23,7 +24,7 @@ class HapticSharedControl:
         speed=2,
         desired_trajectory_params=[],
         vehicle_config={},
-        log: bool = False,
+        log: bool = True,
         simulation: bool = True,
     ):
         self.Cs = Cs
@@ -43,11 +44,11 @@ class HapticSharedControl:
 
         self.log_data = {
             "Time (t)": [],
-            "[Measured] Current Position (m)": {
+            "[Measured] Current Position ~ r(t) (m)": {
                 "X": [],
                 "Y": [],
             },
-            "[Measured] Steering Angles (deg)": {
+            "[Measured] Steering Angles ~ delta(t) (deg)": {
                 "FL": [],
                 "FR": [],
             },
@@ -55,12 +56,12 @@ class HapticSharedControl:
             "[Measured] Steering Wheel Angle ~ Theta(t) (deg)": [],
             "[Computed] Turning Radius ~ R(delta) (m)": [],
             "[Computed] Vehicle Steering Angle ~ Delta(t) (deg)": [],
-            "[Computed] Center of Rotation to WORLD (m)": {
+            "[Computed] Center of Rotation to WORLD ~ r_c(t) (m)": {
                 "X": [],
                 "Y": [],
             },
             "[Computed] Current Error to Trajectory ~ e(t)": [],
-            "[Computed] Predicted Position (m)": {
+            "[Computed] Predicted Position ~ rtp(t) (m)": {
                 "X": [],
                 "Y": [],
             },
@@ -99,9 +100,9 @@ class HapticSharedControl:
         """
 
         self.r = current_position  # measured position from carla
-        self.deltas = steering_angles_deg  # measured steering angles from carla
         self.phi = current_yaw_angle_deg  # measured yaw angle from carla
-
+        self.deltas = steering_angles_deg  # measured steering angles from carla
+        
         # *1 calculate the average steering angle and turning radius
         (
             self.turning_radius,
@@ -311,11 +312,11 @@ class HapticSharedControl:
         """
         print("----------------------")
         self.log_data["Time (t)"].append(time.time())
-        self.log_data["[Measured] Current Position (m)"]["X"].append(self.r[0])
-        self.log_data["[Measured] Current Position (m)"]["Y"].append(self.r[1])
+        self.log_data["[Measured] Current Position ~ r(t) (m)"]["X"].append(self.r[0])
+        self.log_data["[Measured] Current Position ~ r(t) (m)"]["Y"].append(self.r[1])
 
-        self.log_data["[Measured] Steering Angles (deg)"]["FL"].append(self.deltas[0])
-        self.log_data["[Measured] Steering Angles (deg)"]["FR"].append(self.deltas[1])
+        self.log_data["[Measured] Steering Angles ~ delta(t) (deg)"]["FL"].append(self.deltas[0])
+        self.log_data["[Measured] Steering Angles ~ delta(t) (deg)"]["FR"].append(self.deltas[1])
         self.log_data["[Measured] Current Yaw Angle ~ Phi(t) (deg)"].append(self.phi)
         self.log_data["[Measured] Steering Wheel Angle ~ Theta(t) (deg)"].append(
             self.steering_wheel_angle_deg
@@ -325,17 +326,17 @@ class HapticSharedControl:
             self.vehicle_steering_angle_deg
         )
         self.log_data["[Computed] Current Error to Trajectory ~ e(t)"].append(self.e_t)
-        self.log_data["[Computed] Predicted Position (m)"]["X"].append(self.rtp[0])
-        self.log_data["[Computed] Predicted Position (m)"]["Y"].append(self.rtp[1])
+        self.log_data["[Computed] Predicted Position ~ rtp(t) (m)"]["X"].append(self.rtp[0])
+        self.log_data["[Computed] Predicted Position ~ rtp(t) (m)"]["Y"].append(self.rtp[1])
 
         self.log_data["[Computed] Change of Yaw Angle ~ Delta_phi(t) (deg)"].append(
             self.delta_phi_deg
         )
 
-        self.log_data["[Computed] Center of Rotation to WORLD (m)"]["X"].append(
+        self.log_data["[Computed] Center of Rotation to WORLD ~ r_c(t) (m)"]["X"].append(
             self.center_of_rotation_to_world[0]
         )
-        self.log_data["[Computed] Center of Rotation to WORLD (m)"]["Y"].append(
+        self.log_data["[Computed] Center of Rotation to WORLD ~ r_c(t) (m)"]["Y"].append(
             self.center_of_rotation_to_world[1]
         )
 
@@ -370,16 +371,50 @@ class HapticSharedControl:
     def save_log(self):
         """
         Save the log data to a CSV file.
+        
+        The method creates a CSV file if it doesn't exist, writing headers only once.
+        It then appends the latest data point to the file each time it's called.
         """
-        # TODO (fixme): Add the ability to save the log data to a CSV file
-        with open(f"./haptic_shared_control_log_{__current_time__}.csv", "a") as csvfile:
-            headers = list(self.log_data.keys())
-            writer = csv.DictWriter(csvfile, fieldnames=headers)
-            writer.writeheader()
-            for i in range(len(self.log_data["Time (t)"])):
-                row = {key: value[i] for key, value in self.log_data.items()}
-                writer.writerow(row)
-        pass
+        file_path = f"./logs/haptic_shared_control_log_{__current_time__}.csv"
+        file_exists = os.path.isfile(file_path)
+        
+        # Prepare the data structure
+        # For nested dictionaries, flatten the structure for CSV format
+        headers = []
+        row_data = {}
+        
+        for key, value in self.log_data.items():
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    column_name = f"{key}_{sub_key}"
+                    headers.append(column_name)
+                    # Get the last value if available
+                    if sub_value and len(sub_value) > 0:
+                        row_data[column_name] = sub_value[-1]
+                    else:
+                        row_data[column_name] = None
+            else:
+                headers.append(key)
+                # Get the last value if available
+                if value and len(value) > 0:
+                    row_data[key] = value[-1]
+                else:
+                    row_data[key] = None
+        
+        # Write to file
+        with open(file_path, 'a', newline='') as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=headers)
+            
+            # Write header only if the file is newly created
+            if not file_exists:
+                writer.writeheader()
+            
+            # Write the latest data point
+            writer.writerow(row_data)
+            
+        # Optional: Log that data was successfully saved
+        if self.debug:
+            print(f"Log data saved to {file_path}")
 
 
 if __name__ == "__main__":

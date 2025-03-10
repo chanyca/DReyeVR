@@ -397,13 +397,8 @@ def spin_controller_state_test(controller):
         print("#1: Waiting for 2 seconds")
         start_time = time.time()
         while time.time() - start_time < 2:
-            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
-            df.setdefault("State", []).append("Waiting")
-            df.setdefault("Offset", []).append(0)
-            df.setdefault("Saturation", []).append(saturation_percentage)
-            df.setdefault("Coefficient", []).append(coefficient_percentage)
-            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
             time.sleep(time_step)
+            pass
         print("---Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
         
         # *2 play spring force to reach the desired value
@@ -467,9 +462,9 @@ def spin_controller_state_test(controller):
         while time.time() - start_time < 3:
             df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
             df.setdefault("State", []).append("Centering")
-            df.setdefault("Offset", []).append(offset)
-            df.setdefault("Saturation", []).append(saturation_percentage)
-            df.setdefault("Coefficient", []).append(coefficient_percentage)
+            df.setdefault("Offset", []).append(0)
+            df.setdefault("Saturation", []).append(100)
+            df.setdefault("Coefficient", []).append(int((sign)*coefficient_percentage))
             df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
             time.sleep(time_step)
 

@@ -6,7 +6,7 @@ import time
 from pprint import pprint
 
 import numpy as np
-from DReyeVR_utils import DReyeVRSensor
+from DReyeVR_utils import DReyeVRSensor, find_ego_sensor, find_ego_vehicle
 
 try:
     import rospy
@@ -100,6 +100,11 @@ def main():
 
     world = client.get_world()
     sensor = DReyeVRSensor(world)
+    
+    # Note: set the vehicle speed to be stable
+    vehicle = find_ego_vehicle(world)
+    vehicle.set_target_velocity(carla.Vector3D(x=1.0, y =0.0, z=0.0))  # stop the vehicle
+
 
     def publish_and_print(data):
         # global df

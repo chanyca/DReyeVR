@@ -134,7 +134,7 @@ recorded_path = np.array([x, y])
 
 n_points = 50
 
-n_steps = None
+n_steps = 1
 speed = 0.5  # m/s
 init_steering_angle = 10  # abs value
 
