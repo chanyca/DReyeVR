@@ -333,14 +333,14 @@ if __name__ == "__main__":
     P_d = [-0.37066772, -29.02415039]
     P_f = [-6.87066772, -21.62415039]
 
-    yaw_0 = 90 + (-90)
-    yaw_d = 90 + (-80)
-    yaw_f = 90 + (0)
+    yaw_0 =  (-90)
+    yaw_d =  (-110)
+    yaw_f =  (180)
 
     n_points = 10
     path1, control_points1, params1 = calculate_bezier_trajectory(
-        start_pos=P_0[::-1],
-        end_pos=P_d[::-1],
+        start_pos=P_0,
+        end_pos=P_d,
         start_yaw=yaw_0,
         end_yaw=yaw_d,
         n_points=n_points,
@@ -350,8 +350,8 @@ if __name__ == "__main__":
 
     # backward so reverse the yaw angle (+180)
     path2, control_points2, params2 = calculate_bezier_trajectory(
-        start_pos=P_d[::-1],
-        end_pos=P_f[::-1],
+        start_pos=P_d,
+        end_pos=P_f,
         start_yaw=180 + yaw_d,
         end_yaw=180 + yaw_f,
         n_points=n_points,
@@ -403,6 +403,10 @@ if __name__ == "__main__":
         width=0.02 * params2["dist"],
     )
 
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.axis("square")
+    plt.title("Bezier Path with Control Points")
     plt.legend()
     plt.grid(True)
     plt.show()

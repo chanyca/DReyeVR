@@ -57,6 +57,14 @@ def rotation_matrix_ccw(angle_rad):
     )
 
 
+def sign(x):
+    return x / np.abs(x) if x != 0 else 0
+
+
+def linear_fn(slope, intercept):
+    # return y = slope * x + intercept
+    return lambda x: slope * x + intercept
+
 class Vehicle:
     def __init__(self, vehicle_config: dict, model: str = "simple") -> None:
         self.vehicle_config = vehicle_config
@@ -128,12 +136,12 @@ class Vehicle:
         if self.vehicle_model == "simple":
             # REF: https://www.theautopian.com/the-engineering-behind-why-some-cars-can-turn-tighter-than-others/
             steering_angle_rad = self.outer_wheel_steering_angle_rad
-            steering_angle_rad += 1e-6 if steering_angle_rad % (np.pi) == 0 else 0
+            steering_angle_rad += 1e-6 if steering_angle_rad % (np.pi) == 0 else 0 # avoid division by zero
 
             turning_radius = np.sqrt(
                 self.center_of_mass**2 + (self.wheelbase**2) / np.tan(steering_angle_rad) ** 2
             )
-            vehicle_steering_angle = np.arctan(
+            vehicle_steering_angle_rad = np.arctan(
                 self.center_of_mass_ratio * np.tan(steering_angle_rad)
             )
         else:
@@ -141,36 +149,33 @@ class Vehicle:
             # REF: https://www.ijser.org/researchpaper/optimizing-the-turning-radius-of-a-vehicle-using-symmetric.pdf
             self.inner_wheel_steering_angle_rad += (
                 1e-6 if self.inner_wheel_steering_angle_rad % (np.pi) == 0 else 0
-            )
+            ) # avoid division by zero
             self.outer_wheel_steering_angle_rad += (
                 1e-6 if self.outer_wheel_steering_angle_rad % (np.pi) == 0 else 0
-            )
-            turning_angle_rad = arccot(
+            ) # avoid division by zero
+            steering_angle_rad = arccot(
                 (
                     cot(self.inner_wheel_steering_angle_rad)
                     + cot(self.outer_wheel_steering_angle_rad)
                 )
                 / 2
             )
-            vehicle_steering_angle = np.sqrt(
-                (self.center_of_mass**2) + (self.wheelbase**2) * (cot(turning_angle_rad) ** 2)
+            vehicle_steering_angle_rad = np.sqrt(
+                (self.center_of_mass**2) + (self.wheelbase**2) * (cot(steering_angle_rad) ** 2)
             )
 
         return {
             "R": np.abs(turning_radius),
-            "Delta": np.degrees(vehicle_steering_angle),
+            "Delta": np.degrees(vehicle_steering_angle_rad),
             "CoR": np.array(
                 [
-                    self.center_of_mass / np.tan(vehicle_steering_angle),
                     -self.center_of_mass,
+                    self.center_of_mass / np.tan(vehicle_steering_angle_rad),
                 ]
-            ),
+            ), # center of rotation in vehicle coordinates [x, y] 
         }
 
 
-def linear_fn(slope, intercept):
-    # return y = slope * x + intercept
-    return lambda x: slope * x + intercept
 
 
 if __name__ == "__main__":

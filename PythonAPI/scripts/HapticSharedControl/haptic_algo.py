@@ -12,6 +12,190 @@ from .utils import *
 __current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
+def get_sign_of_error(given_position, desired_trajectory=None, tangent_vectors=None, velocity=None):
+    """Get sign of epsilon error.
+    This method calculates the sign of the error between the current position and the desired trajectory.
+    
+    Args:
+        position (numpy.array): x, y coordinate of the current position.
+        desired_trajectory (numpy.ndarray): x, y coordinates of the desired trajectory. [[x1, y1], [x2, y2], ...]
+        tangent_vectors (numpy.ndarray): tangent vectors of the desired trajectory. [[[x1, y1], [x2, y2]], [[x2, y2], [x3, y3]], ...]
+        velocity (float): The speed of the vehicle.
+
+    Returns:
+        _type_: _description_
+    """
+    # cspell: ignore ndarray
+    p1 = given_position
+    _, pt_index = find_closest_point(p1, desired_trajectory)
+
+    p2, p3 = tangent_vectors[pt_index]
+    angle_rad = getAngle(p1, p2, p3, degrees=False)
+
+    return sign(velocity) * (np.sin(angle_rad) / abs(np.sin(angle_rad)))
+
+
+def distance_to_trajectory(given_position, desired_trajectory=None):
+    """
+    Calculate the distance from a given position to the desired trajectory.
+    This method finds the closest point on the desired trajectory to the given position
+    and calculates the distance between them. 
+    It also prints the index of the closest point for debugging purposes.
+    Args:
+        position (tuple): The (x, y) coordinates of the current position.
+        desired_trajectory (numpy.ndarray): The desired trajectory represented as a 2D array of shape (n_points, 2).
+            Each row represents a point in the trajectory with (x, y) coordinates.
+    Returns:
+        tuple: A tuple containing:
+            - distance (float): The distance from the given position to the desired trajectory.
+            - closest_point (numpy.ndarray): The closest point on the desired trajectory to the given position.
+            - index (int): The index of the closest point in the desired trajectory.
+    """
+
+    # More robust distance calculation by checking multiple points
+    min_dist = float("inf")
+    closest_point, idx = find_closest_point(given_position, desired_trajectory)
+    return min(dist(given_position, closest_point), min_dist), closest_point, idx
+
+def predict_position(
+    current_position: list,
+    current_yaw_angle_deg: float,
+    vehicle_steering_angle_deg: float = None,   
+    center_of_rotation_to_vehicle: list = None,
+    turning_radius: float = None,
+    velocity: float = None,
+    tp: float = None,    
+) -> list:
+    """
+    Predict the position of the vehicle at a given time in the future based on its current state.
+    The prediction is based on the vehicle's current position, yaw angle, steering angle, and turning radius.
+    The function also considers the vehicle's velocity and the time preview (tp) for the prediction.
+    
+    Args:
+        current_position (list): The current position of the vehicle as [x, y].
+        current_yaw_angle_deg (float): The current yaw angle of the vehicle in degrees.
+        vehicle_steering_angle_deg (float, optional): The current steering angle of the vehicle in degrees.
+            If not provided, it will be calculated based on the vehicle steering angle.            
+        center_of_rotation_to_vehicle (list, optional): The center of rotation to the vehicle as [x, y].
+            If not provided, it will be calculated based on the vehicle configuration.
+        turning_radius (float, optional): The turning radius of the vehicle. If not provided, it will be calculated based on the vehicle configuration.
+        velocity (float, optional): The speed of the vehicle. If not provided, it will be set to 0.
+        tp (float, optional): The time preview for the prediction. If not provided, it will be set to 0.
+    
+    Returns:
+        dict: A dictionary containing the following:
+        - predicted_position (list): The predicted position of the vehicle as [x, y].
+        - rotating_direction (int): The direction of rotation (-1 for clockwise, 1 for counter-clockwise).
+        - delta_phi_rad (float): The change of yaw angle in radians.
+        - predict_yaw_angle_rad (float): The predicted yaw angle in radians.
+        - center_of_rotation_to_world (list): The center of rotation in world coordinates as [x, y].
+    """    
+    
+    current_yaw_angle_rad = np.radians(current_yaw_angle_deg)
+    vehicle_steering_angle_rad = np.radians(vehicle_steering_angle_deg)
+    
+    # *0 First calculate the center of rotation to the vehicle
+    # convert carla coordinates to popular [x, y]
+    current_yaw_angle_rad = np.pi / 2 - current_yaw_angle_rad
+    current_position = np.array(current_position)[::-1]
+    center_of_rotation_to_vehicle = np.array(center_of_rotation_to_vehicle)[::-1]
+    # [
+    #     a2 / np.tan(delta_v),
+    #     -a2,
+    # ]
+    
+    # define rotation direction for the vehicle
+    rotating_direction = sign(np.sin(vehicle_steering_angle_rad))  
+    #  1 if clockwise, -1 if counter-clockwise for positive forward velocity
+    
+    # *1 transform the vehicle coordinates to the global coordinates
+    # -- rotate current_yaw_angle_rad - np.pi / 2
+    # -- shift with vector current_position
+    # convert carla coordinates to popular [x, y]
+    center_of_rotation_to_world = rotation_matrix_cw(
+        (current_yaw_angle_rad) - np.pi / 2
+    ).dot(center_of_rotation_to_vehicle) + np.array(current_position)
+    
+    # *2 calculate the predicted position
+    # -- calculate the delta_phi_rad
+    # -- calculate the predicted yaw angle
+    # -- calculate the predicted position
+
+    delta_phi_rad = rotating_direction * velocity * tp / turning_radius
+
+    predict_yaw_angle_rad = current_yaw_angle_rad - delta_phi_rad
+
+    predicted_position_in_world = (
+        center_of_rotation_to_world
+        + turning_radius
+        * np.array(
+            [
+                np.cos(
+                    predict_yaw_angle_rad
+                    - vehicle_steering_angle_rad
+                    + rotating_direction * np.pi / 2
+                ),
+                np.sin(
+                    predict_yaw_angle_rad
+                    - vehicle_steering_angle_rad
+                    + rotating_direction * np.pi / 2
+                ),
+            ]
+        )
+    )
+    
+    # *3 convert back to carla coordinates
+    predict_yaw_angle_rad = np.pi / 2 - predict_yaw_angle_rad 
+    predicted_position_in_world = predicted_position_in_world[::-1]
+    center_of_rotation_to_world = center_of_rotation_to_world[::-1]
+
+    return {
+            "predicted_position": predicted_position_in_world,
+            "rotating_direction": rotating_direction,
+            "delta_phi_rad": delta_phi_rad,
+            "predict_yaw_angle_rad": predict_yaw_angle_rad,
+            "center_of_rotation_to_world": center_of_rotation_to_world,
+            }
+
+# === HapticSharedControl Class ===
+# This class implements the Haptic Shared Control algorithm for vehicle steering.
+# It calculates the torque to be applied to the steering wheel based on the current position,
+# steering angles, and yaw angle of the vehicle.
+# The algorithm uses a preview driver model to predict the desired steering angle and
+# calculates the torque based on the error between the current and desired steering angles.
+# It also logs the data for debugging purposes.
+# The class is designed to be used in a simulation environment, but can also be adapted for real-world applications.
+
+log_dict = {
+    "Time (t)": [],
+    "[Measured] Current Position ~ r(t) (m)": {
+        "X": [],
+        "Y": [],
+    },
+    "[Measured] Steering Angles ~ delta(t) (deg)": {
+        "FL": [],
+        "FR": [],
+    },
+    "[Measured] Current Yaw Angle ~ Phi(t) (deg)": [],
+    "[Measured] Steering Wheel Angle ~ Theta(t) (deg)": [],
+    "[Computed] Turning Radius ~ R(delta) (m)": [],
+    "[Computed] Vehicle Steering Angle ~ Delta(t) (deg)": [],
+    "[Computed] Center of Rotation to WORLD ~ r_c(t) (m)": {
+        "X": [],
+        "Y": [],
+    },
+    "[Computed] Current Error to Trajectory ~ e(t)": [],
+    "[Computed] Predicted Position ~ r_tp(t) (m)": {
+        "X": [],
+        "Y": [],
+    },
+    "[Computed] Change of Yaw Angle ~ Delta_phi(t) (deg)": [],
+    "[Computed] Predicted Yaw Angle ~ Phi_tp(t) (deg)": [],
+    "[Computed] Predicted Error to Trajectory ~ eps_tp(t)": [],
+    "[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (deg)": [],
+    "[Computed] Torque applied ~ Tau_das (N.m)": [],
+}
+
 class HapticSharedControl:
     debug = True
 
@@ -21,7 +205,7 @@ class HapticSharedControl:
         Kc=0.5,
         T=1.0,
         tp=1.0,
-        speed=2,
+        speed=1.0,
         desired_trajectory_params=[],
         vehicle_config={},
         log: bool = True,
@@ -37,40 +221,11 @@ class HapticSharedControl:
         self.vehicle = Vehicle(vehicle_config)
 
         self.desired_trajectory_params = desired_trajectory_params
-        self.desired_trajectory = desired_trajectory_params["path"]
 
         self.log = log
         self.simulation = simulation
 
-        self.log_data = {
-            "Time (t)": [],
-            "[Measured] Current Position ~ r(t) (m)": {
-                "X": [],
-                "Y": [],
-            },
-            "[Measured] Steering Angles ~ delta(t) (deg)": {
-                "FL": [],
-                "FR": [],
-            },
-            "[Measured] Current Yaw Angle ~ Phi(t) (deg)": [],
-            "[Measured] Steering Wheel Angle ~ Theta(t) (deg)": [],
-            "[Computed] Turning Radius ~ R(delta) (m)": [],
-            "[Computed] Vehicle Steering Angle ~ Delta(t) (deg)": [],
-            "[Computed] Center of Rotation to WORLD ~ r_c(t) (m)": {
-                "X": [],
-                "Y": [],
-            },
-            "[Computed] Current Error to Trajectory ~ e(t)": [],
-            "[Computed] Predicted Position ~ rtp(t) (m)": {
-                "X": [],
-                "Y": [],
-            },
-            "[Computed] Change of Yaw Angle ~ Delta_phi(t) (deg)": [],
-            "[Computed] Predicted Yaw Angle ~ Phi_tp(t) (deg)": [],
-            "[Computed] Predicted Error to Trajectory ~ eps_tp(t)": [],
-            "[Computed] Desired Steering Wheel Angle ~ Theta_d(t) (deg)": [],
-            "[Computed] Torque applied ~ Tau_das (N.m)": [],
-        }
+        self.log_data = log_dict.copy()
 
     def calculate_torque(
         self,
@@ -82,21 +237,16 @@ class HapticSharedControl:
         """
         Calculate the torque for the haptic shared control system.
         Args:
-            current_position : tuple or list
-                The current position of the vehicle in the form (X, Y) in meters.
-            steering_angles_deg : tuple or list
-                The steering angles of the front left (FL) and front right (FR) wheels in degrees.
-            current_yaw_angle_deg : float
-                The current yaw angle of the vehicle in degrees.
-            steering_wheel_angle_deg : float, optional
-                The steering wheel angle in degrees. If not provided, it is assumed to be the same as the vehicle steering angle.
+            current_position (tuple): The current position of the vehicle (x, y).
+            steering_angles_deg (float): The current steering angle of the vehicle in degrees.
+            current_yaw_angle_deg (float): The current yaw angle of the vehicle in degrees.
+            steering_wheel_angle_deg (float, optional): The current steering wheel angle in degrees. 
+                If not provided, it will be calculated based on the vehicle steering angle.
         Returns:
-            tau_das : float
-                The calculated torque in Newton-meters.
-            coef : float
-                The coefficient derived from the sigmoid function based on the error to the trajectory.
-            desired_steering_angle_deg : float
-                The desired steering wheel angle in degrees.
+            tuple: A tuple containing:
+                - tau_das (float): The calculated torque.
+                - coef (float): The coefficient based on the sigmoid function.
+                - desired_steering_wheel_angle_deg (float): The desired steering wheel angle in degrees.
         """
 
         self.r = current_position  # measured position from carla
@@ -108,8 +258,9 @@ class HapticSharedControl:
             self.turning_radius,
             self.vehicle_steering_angle_deg,
             self.center_of_rotation_to_vehicle,
-        ) = self.vehicle.calc_turning_radius(steering_angles_deg).values()
-
+        ) = self.vehicle.calc_turning_radius(steering_angles=self.deltas).values()
+        print("[Computed] Center of Rotation to Vehicle ~ r_c_v(t) (m):", self.center_of_rotation_to_vehicle)
+        
         self.vehicle_steering_angle_rad = np.radians(self.vehicle_steering_angle_deg)
 
         # Check if the steering wheel angle is provided, otherwise use the vehicle steering angle
@@ -123,12 +274,16 @@ class HapticSharedControl:
         self.steering_wheel_angle_rad = np.radians(self.steering_wheel_angle_deg)
 
         # *2 Calculate the error of current position to the desired trajectory
-        self.e_t, self.closest_pt_rt, self.closest_pt_rt_idx = self.distance_to_trajectory(
-            current_position
+        self.e_t, self.closest_pt_rt, self.closest_pt_rt_idx = distance_to_trajectory(
+            given_position=current_position,
+            desired_trajectory=self.desired_trajectory_params["path"]
         )
 
         # *3 Calculate the previewed driver model
-        self.theta_d_rad = self.preview_driver_model(current_position, current_yaw_angle_deg)
+        self.theta_d_rad = self.preview_driver_model(current_position=self.r, 
+                                                     current_yaw_angle_deg=self.phi, 
+                                                     current_vehicle_steering_angle_deg=self.vehicle_steering_angle_deg)
+        
         self.theta_d_deg = np.degrees(self.theta_d_rad)
 
         # *4 Calculate the torque
@@ -142,7 +297,7 @@ class HapticSharedControl:
 
         return self.tau_das, coef, desired_steering_wheel_angle_deg
 
-    def preview_driver_model(self, current_position, current_yaw_angle_deg, method="simple"):
+    def preview_driver_model(self, current_position, current_yaw_angle_deg, current_vehicle_steering_angle_deg, method="simple"):
         """
         Predicts the desired steering angle based on the current position and yaw angle of the vehicle.
         Args:
@@ -155,21 +310,41 @@ class HapticSharedControl:
         """
 
         # *3.1 Predict the position of the vehicle at the preview time
-        self.rtp = self.predict_position(
+        (
+            self.rtp, 
+            self.rotating_direction, 
+            self.delta_phi_rad, 
+            self.predict_yaw_angle_rad, 
+            self.center_of_rotation_to_world
+        ) = predict_position(
             current_position=current_position,
             current_yaw_angle_deg=current_yaw_angle_deg,
-            vehicle_steering_angle_deg=self.vehicle_steering_angle_deg,
-        )
-
+            vehicle_steering_angle_deg=current_vehicle_steering_angle_deg,
+            center_of_rotation_to_vehicle=self.center_of_rotation_to_vehicle,
+            turning_radius=self.turning_radius,
+            velocity=self.speed,
+            tp=self.tp,
+        ).values()
+        
+        self.delta_phi_deg = np.degrees(self.delta_phi_rad)
+        self.predict_yaw_angle_deg = np.degrees(self.predict_yaw_angle_rad)
+        
+        
         # *3.2 Calculate the error between desired trajectory and predicted position with tp[s] ahead
         # NOTE: check the sign of the error fn
-        epsilon_tp_t, self.closest_pt_rtp, self.closest_pt_rtp_idx = self.distance_to_trajectory(
-            self.rtp
+        epsilon_tp_t, self.closest_pt_rtp, self.closest_pt_rtp_idx = distance_to_trajectory(
+            given_position=self.rtp,
+            desired_trajectory=self.desired_trajectory_params["path"]
         )
-        self.epsilon_tp_t = self.get_sign_of_error(self.rtp) * epsilon_tp_t
+        
+        self.epsilon_tp_t = get_sign_of_error(given_position=self.rtp,
+                                              desired_trajectory=self.desired_trajectory_params["path"],
+                                              tangent_vectors=self.desired_trajectory_params["tangent"],
+                                              velocity=self.speed,
+                                              ) * epsilon_tp_t
 
         # *3.3 Calculate the desired steering angle
-        if method == "simple":
+        if method == "sim":
             theta_d_rad = self.Kc * self.epsilon_tp_t + self.steering_wheel_angle_rad
         else:
             # ?... development in progress
@@ -185,102 +360,6 @@ class HapticSharedControl:
             theta_d_rad = theta_d_rad_next
 
         return theta_d_rad
-
-    def predict_position(
-        self,
-        current_position: list,
-        current_yaw_angle_deg: float,
-        vehicle_steering_angle_deg: float,
-    ) -> list:
-        """
-        Predicts the future position of the vehicle based on the current position and yaw angle.
-        Args:
-            current_position (array-like): The current position of the vehicle in world coordinates [x, y].
-            current_yaw_angle_deg (float): The current yaw angle of the vehicle in degrees.
-        Returns:
-            numpy.ndarray: The predicted position of the vehicle in world coordinates [x, y].
-        """
-
-        current_yaw_angle_rad = np.radians(current_yaw_angle_deg)
-        vehicle_steering_angle_rad = np.radians(vehicle_steering_angle_deg)
-
-        # vehicle coordinates, origin at the center of mass
-        # define rotation direction for the vehicle
-        # TODO (fixme): Check if the center of rotation is correct, from left to right and from right to left
-
-        self.rotating_direction = np.sin(vehicle_steering_angle_rad) / np.abs(
-            np.sin(vehicle_steering_angle_rad)
-        )  #  -1 if clockwise, 1 if counter-clockwise
-
-        # First calculate the center of rotation to the vehicle
-        center_of_rotation_to_vehicle = self.center_of_rotation_to_vehicle
-
-        # *1 transform the vehicle coordinates to the global coordinates
-        # -- rotate current_yaw_angle_rad - np.pi / 2
-        # -- shift with vector current_position
-        self.center_of_rotation_to_world = rotation_matrix_cw(
-            current_yaw_angle_rad - np.pi / 2
-        ).dot(center_of_rotation_to_vehicle)
-        +np.array(current_position)
-
-        # *2 calculate the predicted position
-        # -- calculate the delta_phi_rad
-        # -- calculate the predicted yaw angle
-        # -- calculate the predicted position
-
-        self.delta_phi_rad = self.rotating_direction * self.speed * self.tp / self.turning_radius
-        self.delta_phi_deg = np.degrees(self.delta_phi_rad)
-
-        self.predict_yaw_angle_rad = current_yaw_angle_rad - self.delta_phi_rad
-        self.predict_yaw_angle_deg = np.degrees(self.predict_yaw_angle_rad)
-
-        predicted_position_in_world = (
-            self.center_of_rotation_to_world
-            + self.turning_radius
-            * np.array(
-                [
-                    np.cos(
-                        self.predict_yaw_angle_rad
-                        - vehicle_steering_angle_rad
-                        + self.rotating_direction * np.pi / 2
-                    ),
-                    np.sin(
-                        self.predict_yaw_angle_rad
-                        - vehicle_steering_angle_rad
-                        + self.rotating_direction * np.pi / 2
-                    ),
-                ]
-            )
-        )
-
-        return predicted_position_in_world
-
-    def distance_to_trajectory(self, position):
-        """
-        Calculate the distance from a given position to the desired trajectory.
-        This method finds the closest point on the desired trajectory to the given position
-        and calculates the distance between them. It also prints the index of the closest point
-        for debugging purposes.
-        Args:
-            position (tuple): The (x, y) coordinates of the current position.
-        Returns:
-            float: The distance from the given position to the closest point on the desired trajectory.
-        """
-
-        # More robust distance calculation by checking multiple points
-        min_dist = float("inf")
-        closest_point, idx = find_closest_point(position, self.desired_trajectory)
-        return min(dist(position, closest_point), min_dist), closest_point, idx
-
-    def get_sign_of_error(self, position):
-
-        p1 = position
-        _, pt_index = find_closest_point(p1, self.desired_trajectory)
-
-        p2, p3 = self.desired_trajectory_params["tangent"][pt_index]
-        angle_rad = getAngle(p1, p2, p3, degrees=False)
-
-        return -(self.speed / np.abs(self.speed)) * (np.sin(angle_rad) / abs(np.sin(angle_rad)))
 
     def translate_sa_to_swa(self, sa_deg):
         """
@@ -326,8 +405,8 @@ class HapticSharedControl:
             self.vehicle_steering_angle_deg
         )
         self.log_data["[Computed] Current Error to Trajectory ~ e(t)"].append(self.e_t)
-        self.log_data["[Computed] Predicted Position ~ rtp(t) (m)"]["X"].append(self.rtp[0])
-        self.log_data["[Computed] Predicted Position ~ rtp(t) (m)"]["Y"].append(self.rtp[1])
+        self.log_data["[Computed] Predicted Position ~ r_tp(t) (m)"]["X"].append(self.rtp[0])
+        self.log_data["[Computed] Predicted Position ~ r_tp(t) (m)"]["Y"].append(self.rtp[1])
 
         self.log_data["[Computed] Change of Yaw Angle ~ Delta_phi(t) (deg)"].append(
             self.delta_phi_deg

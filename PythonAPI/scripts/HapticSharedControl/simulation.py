@@ -112,10 +112,10 @@ def plot_trajectory(paths, trajectories, yaw_angles_deg, recorded_path=None):
             plot_arrow(point[0], point[1], np.radians(yaw_angles_deg[i][idx]), 0.3, width=0.2)
 
     if recorded_path is not None:
-        plt.plot(recorded_path[1], recorded_path[0], label="Recorded Path", color="orange")
+        plt.plot(recorded_path[1], recorded_path[0], label="Recorded Path", color="orange", marker=".")
 
-    plt.xlabel("X")
-    plt.ylabel("Y")
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
     plt.title("Vehicle Path and Bezier Trajectory")
 
     plt.legend()

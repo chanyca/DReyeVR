@@ -139,7 +139,7 @@ def main():
     world = client.get_world()
 
     sensor = DReyeVRSensor(world)
-    
+    vehicle_ego = find_ego_vehicle(world)    
     controller = WheelController()
 
     ready = True
@@ -153,15 +153,11 @@ def main():
     idx = "3"
     
     param = None
-    torques = []
-    trajectory = []
-    vehicle_yaw_angles_deg = []
 
-    steering_wheel_angles = []
-    desired_steering_angles = []
-
+    # To calibrate the steering wheel angle and steering angle
+    # find the linear relationship between steering wheel angle and steering angle
     init_sa_swa = [[], []]
-    coef = [[], []]
+    coef = [[], []]  
     
     def control_loop(data: dict) -> None:
         """This function is called every time the sensor receives new data from the simulation.
@@ -175,13 +171,10 @@ def main():
         nonlocal idx
 
         nonlocal param
-        nonlocal coef
-        nonlocal torques
-        nonlocal trajectory
-        nonlocal vehicle_yaw_angles_deg
-        nonlocal steering_wheel_angles
-        nonlocal desired_steering_angles
+
         nonlocal init_sa_swa
+        nonlocal coef
+        
         nonlocal delta_t
         nonlocal ready
         nonlocal take_control
@@ -199,7 +192,7 @@ def main():
 
             controller.play_spring_force(
                 offset_percentage=desired_offset,
-                saturation_percentage=50,
+                saturation_percentage=100,
                 coefficient_percentage=100,
             )
 
@@ -238,8 +231,8 @@ def main():
 
             position_to_world = measured_carla_data["Location"][0:2]  # [x, y]
             vehicle_yaw = measured_carla_data["Rotation"][1]  # yaw
-
-            velocity = measured_carla_data["Velocity"][0:2]  # [x, y]
+            velocity = measured_carla_data["Velocity"][0:2]  # [Vx, Vy]
+            
             speed = np.linalg.norm(velocity)
             
             # get signal from Logitech Wheel SDK, if pressed the reverse button, then reverse the steering angle
@@ -247,9 +240,6 @@ def main():
             if any([btn_value for btn_value in list(buttons.values())[1:]]):
                 backward_btn_pressed_cnt += 1
                 print("Backward button pressed")
-                
-            with open("log2_2.txt", "a") as f:
-                f.write(f"{position_to_world[0]},{position_to_world[1]},{vehicle_yaw},{speed}\n")
                 
             backward = backward_btn_pressed_cnt % 2 == 1
 
@@ -290,30 +280,25 @@ def main():
 
             # 5. if take control is allowed, then start the self driving
             if take_control:
+                # backward velocity
+                vehicle_ego.set_target_velocity(carla.Vector3D(x=-1.0, y =0.0, z=0.0))
+                
                 haptic_control = HapticSharedControl(
-                    # Cs=0.5,
-                    # Kc=0.5,
-                    # T=2,
-                    tp=2,
                     speed=speed,
                     desired_trajectory_params=param,
                     vehicle_config=vehicle_config,
+                    simulation=False
                 )
+                
                 torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
                     current_position=position_to_world,
-                    steering_angles_deg=steering_angles,
                     current_yaw_angle_deg=vehicle_yaw,
+                    steering_angles_deg=steering_angles,
                     steering_wheel_angle_deg=steering_wheel_angle,
                 )
+                
                 desired_steering_angle_deg = np.clip(desired_steering_angle_deg, -450, 450)
                 
-                torques.append(torque)
-                trajectory.append(position_to_world)
-                steering_wheel_angles.append(steering_wheel_angle)
-
-                vehicle_yaw_angles_deg.append(vehicle_yaw)
-                desired_steering_angles.append(desired_steering_angle_deg)
-
                 try:
                     desired_offset = int(desired_steering_angle_deg * 100 / 450.0)
                 except:
@@ -325,11 +310,12 @@ def main():
                         )
                     )
                     desired_offset = int(desired_offset_deg * 100 / 450.0)
+                
                 # desired_offset = - 60
                 print(f"--> Desired Offset: {desired_offset}")
                 controller.play_spring_force(
                     offset_percentage=desired_offset,
-                    saturation_percentage=50,
+                    saturation_percentage=100,
                     coefficient_percentage=100,
                 )
                 
