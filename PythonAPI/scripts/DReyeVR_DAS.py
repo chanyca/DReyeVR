@@ -3,13 +3,14 @@ import sys
 import time
 from pprint import pprint
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
 
@@ -221,6 +222,7 @@ def main():
                 # ready to start the simulation
                 ready = True
                 print("Ready to start the simulation")
+                sys.exit(0)
             time.sleep(0.5)
             return
 
