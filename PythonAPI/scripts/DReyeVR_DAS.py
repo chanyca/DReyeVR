@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import sys
 import time
 from pprint import pprint
@@ -11,6 +12,7 @@ from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
 
+__current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
 
 with open("../data/paths/driving_path_left2right.txt", "r") as f:
@@ -185,7 +187,7 @@ def main():
         sensor.update(data)
         measured_carla_data = sensor.data
         # pprint(measured_carla_data) # more useful print here (contains all attributes)
-        save_sensor_data_to_csv(measured_carla_data, file_path="carla_sensor_log.csv")
+        save_sensor_data_to_csv(measured_carla_data, file_path=f"./logs/carla_sensor_log_{__current_time__}.csv")
     
         # 0. Initialize the steering wheel angle and steering angle
         if not ready:
@@ -321,7 +323,7 @@ def main():
                     saturation_percentage=100,
                     coefficient_percentage=100,
                 )
-                with open("log_steering_wheel.txt", "a") as f:
+                with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "a") as f:
                     f.write(f"{desired_steering_angle_deg},{controller.get_acceleration_pedal()},{controller.get_angle()}\n")
                 
             else:
