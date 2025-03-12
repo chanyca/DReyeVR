@@ -198,7 +198,7 @@ log_dict = {
 }
 
 class HapticSharedControl:
-    debug = True
+    debug = False
 
     def __init__(
         self,
@@ -297,7 +297,11 @@ class HapticSharedControl:
 
         return self.tau_das, coef, desired_steering_wheel_angle_deg
 
-    def preview_driver_model(self, current_position, current_yaw_angle_deg, current_vehicle_steering_angle_deg, method="simple"):
+    def preview_driver_model(self, 
+                             current_position, 
+                             current_yaw_angle_deg, 
+                             current_vehicle_steering_angle_deg, 
+                             method="simple"):
         """
         Predicts the desired steering angle based on the current position and yaw angle of the vehicle.
         Args:
