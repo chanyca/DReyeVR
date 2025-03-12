@@ -188,7 +188,7 @@ class WheelController:
         if not translate:
             return self.get_state_engines()["lY"]
         else:
-            return abs(self.get_state_engines()["lY"] - 32767.0) / 65535.0
+            return np.clip(self.get_state_engines()["lY"], -32767.0, 32767.0) / 32767.0
 
     def get_brake_pedal(self, translate=True):
         """
@@ -525,6 +525,6 @@ def test_controller():
 
 
 if __name__ == "__main__":
-    spin_test()
-    # test_controller()
+    # spin_test()
+    test_controller()
     print("Done.")

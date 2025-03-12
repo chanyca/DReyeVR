@@ -4,13 +4,14 @@ import sys
 import time
 from pprint import pprint
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle, save_sensor_data_to_csv
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 __current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
@@ -170,8 +171,8 @@ def main():
 
         global vehicle
         global predefined_path
+        
         nonlocal idx
-
         nonlocal param
 
         nonlocal init_sa_swa
@@ -187,7 +188,7 @@ def main():
         sensor.update(data)
         measured_carla_data = sensor.data
         # pprint(measured_carla_data) # more useful print here (contains all attributes)
-        save_sensor_data_to_csv(measured_carla_data, file_path=f"./logs/carla_sensor_log_{__current_time__}.csv")
+        
     
         # 0. Initialize the steering wheel angle and steering angle
         if not ready:
@@ -228,7 +229,7 @@ def main():
             time.sleep(0.5)
             return
 
-        # print("=====================================")
+        print("=====================================")
 
         try:
             # 1. get vehicle current states (Position, Yaw, Speed, Wheel Angle)
@@ -243,11 +244,17 @@ def main():
             buttons = controller.get_buttons_pressed()
             if any([btn_value for btn_value in list(buttons.values())[1:]]):
                 backward_btn_pressed_cnt += 1
-                # print("Backward button pressed")
+                print("Backward button pressed")
                 
             backward = backward_btn_pressed_cnt % 2 == 1
 
             speed *= -1 if backward else 1
+            print(f"Speed: {speed:.2f} m/s")
+            # vel_angle = np.arctan2(velocity[1], velocity[0])
+            # sign_of_speed = sign(np.cos(vel_angle))
+            # speed *= sign_of_speed
+            # vel_angle = np.degrees(vel_angle)
+            # print(f"Velocity: {speed:.2f} m/s, Angle: {vel_angle:.2f} degrees, Yaw: {vehicle_yaw:.2f} degrees")
             
             # 2. get steering wheel angle
             steering_wheel_angle = controller.get_angle() * 450.0  # in degrees
@@ -293,7 +300,7 @@ def main():
                     vehicle_config=vehicle_config,
                     simulation=False
                 )
-                haptic_control.debug = False
+                haptic_control.debug = True
                 
                 torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
                     current_position=position_to_world,
@@ -317,34 +324,39 @@ def main():
                     desired_offset = int(desired_offset_deg * 100 / 450.0)
                 
                 # desired_offset = - 60
-                # print(f"--> Desired Offset: {desired_offset}")
+                print(f"--> Desired Offset: {desired_offset}")
                 controller.play_spring_force(
                     offset_percentage=desired_offset,
                     saturation_percentage=100,
                     coefficient_percentage=100,
                 )
+                # save wheel data
+                if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.txt"):
+                    with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "w") as f:
+                        f.write("Desired Steering Angle, Acceleration Pedal, Steering Wheel Angle\n")
+                        
                 with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "a") as f:
                     f.write(f"{desired_steering_angle_deg},{controller.get_acceleration_pedal()},{controller.get_angle()}\n")
                 
+                # save carla sensor data
+                save_sensor_data_to_csv(measured_carla_data, file_path=f"./logs/carla_sensor_log_{__current_time__}.csv")
             else:
-                distance_to_SP = dist(position_to_world, predefined_path["1"]["P_0"])
-                distance_to_DCP = dist(position_to_world, predefined_path["1"]["P_d"])
-                # print(
-                #     f"Distance to SP: {distance_to_SP:3f}m",
-                #     f" | Distance to DCP: {distance_to_DCP:3f}m",
-                # )
+                distance_to_SP = dist(position_to_world, predefined_path[idx]["P_0"])
+                distance_to_DCP = dist(position_to_world, predefined_path[idx]["P_d"])
+                print(
+                    f"Distance to SP: {distance_to_SP:3f}m",
+                    f" | Distance to DCP: {distance_to_DCP:3f}m",
+                )
 
             # 6. If vehicle reach the final point, stop the program
-            if dist(position_to_world, predefined_path["1"]["P_f"]) < 1:
+            if dist(position_to_world, predefined_path[idx]["P_f"]) < 1:
                 controller.stop_spring_force()
-                # print("Simulation Completed")
-                
+                print("Simulation Completed")
                 sys.exit()
 
             time.sleep(delta_t)
         except Exception as e:
             print("Error: ", repr(e))
-            # sys.exit()
 
     # subscribe to DReyeVR sensor
     sensor.ego_sensor.listen(control_loop)
@@ -361,8 +373,6 @@ def main():
             settings.fixed_delta_seconds = None
             world.apply_settings(settings)
         controller.exit()
-
-
 if __name__ == "__main__":
     try:
         main()

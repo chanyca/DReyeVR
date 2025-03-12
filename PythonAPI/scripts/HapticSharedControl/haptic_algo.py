@@ -168,6 +168,7 @@ def predict_position(
 
 log_dict = {
     "Time (t)": [],
+    "[Measured] Speed": [],
     "[Measured] Current Position ~ r(t) (m)": {
         "X": [],
         "Y": [],
@@ -397,6 +398,7 @@ class HapticSharedControl:
         """
         print("----------------------")
         self.log_data["Time (t)"].append(time.time())
+        self.log_data["[Measured] Speed"].append(self.speed)
         self.log_data["[Measured] Current Position ~ r(t) (m)"]["X"].append(self.r[0])
         self.log_data["[Measured] Current Position ~ r(t) (m)"]["Y"].append(self.r[1])
 
