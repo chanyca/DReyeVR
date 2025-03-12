@@ -3,13 +3,14 @@ import sys
 import time
 from pprint import pprint
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
 
@@ -225,7 +226,7 @@ def main():
             time.sleep(0.5)
             return
 
-        print("=====================================")
+        # print("=====================================")
 
         try:
             # 1. get vehicle current states (Position, Yaw, Speed, Wheel Angle)
@@ -240,7 +241,7 @@ def main():
             buttons = controller.get_buttons_pressed()
             if any([btn_value for btn_value in list(buttons.values())[1:]]):
                 backward_btn_pressed_cnt += 1
-                print("Backward button pressed")
+                # print("Backward button pressed")
                 
             backward = backward_btn_pressed_cnt % 2 == 1
 
@@ -282,7 +283,7 @@ def main():
             # 5. if take control is allowed, then start the self driving
             if take_control:
                 # backward velocity
-                vehicle_ego.set_target_velocity(carla.Vector3D(x=-1.0, y =0.0, z=0.0))
+                # vehicle_ego.set_target_velocity(carla.Vector3D(x=-1.0, y =0.0, z=0.0))
                 
                 haptic_control = HapticSharedControl(
                     speed=speed,
@@ -290,6 +291,7 @@ def main():
                     vehicle_config=vehicle_config,
                     simulation=False
                 )
+                haptic_control.debug = False
                 
                 torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
                     current_position=position_to_world,
@@ -313,7 +315,7 @@ def main():
                     desired_offset = int(desired_offset_deg * 100 / 450.0)
                 
                 # desired_offset = - 60
-                print(f"--> Desired Offset: {desired_offset}")
+                # print(f"--> Desired Offset: {desired_offset}")
                 controller.play_spring_force(
                     offset_percentage=desired_offset,
                     saturation_percentage=100,
@@ -323,15 +325,15 @@ def main():
             else:
                 distance_to_SP = dist(position_to_world, predefined_path["1"]["P_0"])
                 distance_to_DCP = dist(position_to_world, predefined_path["1"]["P_d"])
-                print(
-                    f"Distance to SP: {distance_to_SP:3f}m",
-                    f" | Distance to DCP: {distance_to_DCP:3f}m",
-                )
+                # print(
+                #     f"Distance to SP: {distance_to_SP:3f}m",
+                #     f" | Distance to DCP: {distance_to_DCP:3f}m",
+                # )
 
             # 6. If vehicle reach the final point, stop the program
             if dist(position_to_world, predefined_path["1"]["P_f"]) < 1:
                 controller.stop_spring_force()
-                print("Simulation Completed")
+                # print("Simulation Completed")
                 
                 sys.exit()
 
