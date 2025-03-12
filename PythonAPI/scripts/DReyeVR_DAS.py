@@ -3,14 +3,13 @@ import sys
 import time
 from pprint import pprint
 
+import carla
 import numpy as np
-from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle
+from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle, save_sensor_data_to_csv
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
-
-import carla
 
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
 
@@ -185,8 +184,9 @@ def main():
         # update the sensor data
         sensor.update(data)
         measured_carla_data = sensor.data
-        pprint(measured_carla_data) # more useful print here (contains all attributes)
-
+        # pprint(measured_carla_data) # more useful print here (contains all attributes)
+        save_sensor_data_to_csv(measured_carla_data, file_path="carla_sensor_log.csv")
+    
         # 0. Initialize the steering wheel angle and steering angle
         if not ready:
             desired_offset = len(init_sa_swa[0]) - 100
@@ -321,6 +321,8 @@ def main():
                     saturation_percentage=100,
                     coefficient_percentage=100,
                 )
+                with open("log_steering_wheel.txt", "a") as f:
+                    f.write(f"{desired_steering_angle_deg},{controller.get_acceleration_pedal()},{controller.get_angle()}\n")
                 
             else:
                 distance_to_SP = dist(position_to_world, predefined_path["1"]["P_0"])

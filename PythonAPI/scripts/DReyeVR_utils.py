@@ -1,11 +1,11 @@
+import csv
 import os
 import sys
 import time
 from typing import Any, Dict, List, Optional
 
-import numpy as np
-
 import carla
+import numpy as np
 
 sys.path.append(os.path.join(os.getenv("CARLA_ROOT"), "PythonAPI"))
 import examples  # calls ./__init__.py to add all the necessary things to path
@@ -104,6 +104,11 @@ class DReyeVRSensor:
         # velocity
         velocity = self.ego_vehicle.get_velocity()
         self.data["Velocity"] = np.array([velocity.x, velocity.y, velocity.z])
+        # acceleration
+        acceleration = self.ego_vehicle.get_acceleration()
+        self.data["Acceleration"] = np.array(
+            [acceleration.x, acceleration.y, acceleration.z]
+        )
         # angular velocity
         angular_velocity = self.ego_vehicle.get_angular_velocity()
         self.data["AngularVelocity"] = np.array(
@@ -170,3 +175,100 @@ class DReyeVRSensor:
         FinalRay = ptM - oM  # Combined ray between midpoints of endpoints
         # returns the magnitude of the vector (length)
         return np.linalg.norm(FinalRay) / 100.0
+    
+def save_sensor_data_to_csv(data, file_path="dreyevr_sensor_data.csv"):
+    """
+    Save DReyeVR sensor data to a CSV file in tabular format.
+    
+    Args:
+        data (dict): The sensor data dictionary from DReyeVR
+        file_path (str): Path to save the CSV file
+    """
+
+    
+    file_exists = os.path.isfile(file_path)
+    
+    # Define headers - flatten nested arrays
+    headers = []
+    row_data = {}
+    
+    for key, value in data.items():
+        # Handle special case for transform (list of arrays)
+        if key == 'transform':
+            for i, arr in enumerate(value):
+                for j, val in enumerate(arr):
+                    column_name = f"{key}_{i}_{j}"
+                    headers.append(column_name)
+                    row_data[column_name] = val
+        # Handle numpy arrays
+        elif isinstance(value, np.ndarray):
+            for i, val in enumerate(value):
+                column_name = f"{key}_{i}"
+                headers.append(column_name)
+                row_data[column_name] = val
+        # Handle standard values
+        else:
+            headers.append(key)
+            row_data[key] = value
+    
+    # Write to CSV file
+    with open(file_path, 'a', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=headers)
+        
+        # Write header only if the file is newly created
+        if not file_exists:
+            writer.writeheader()
+        
+        # Write the data row
+        writer.writerow(row_data)
+        
+"""sensor data example:
+{'AngularVelocity': array([ 6.43164603e-05,  3.80409183e-05, -1.56078613e-06]),
+ 'BL_Wheel_Angle': 0.0,
+ 'BR_Wheel_Angle': 0.0,
+ 'FL_Wheel_Angle': 0.0,
+ 'FR_Wheel_Angle': 0.0,
+ 'Location': array([  1.03617442, -18.3298645 ,   0.16717896]),
+ 'Rotation': array([-4.49221507e-02,  4.99724770e+01, -3.72619666e-02]),
+ 'Velocity': array([4.93484549e-06, 2.47542033e-07, 4.61575430e-04]),
+ 'brake_input': 0.0,
+ 'camera_location': array([0., 0., 0.]),
+ 'camera_rotation': array([0., 0., 0.]),
+ 'current_gear_input': False,
+ 'focus_actor_dist': 1164.83837890625,
+ 'focus_actor_name': 'Road_Grass_Town05_123',
+ 'focus_actor_pt': array([ -111.9954071 , -1904.90673828,    16.88562012]),
+ 'frame': 13614,
+ 'frame_number': 13614,
+ 'framesequence': 13612,
+ 'gaze_dir': array([ 0.98058057,  0.10336377, -0.16666579]),
+ 'gaze_origin': array([0., 0., 0.]),
+ 'gaze_valid': True,
+ 'gaze_vergence': 0.0,
+ 'handbrake_input': False,
+ 'left_eye_openness': 0.0,
+ 'left_eye_openness_valid': False,
+ 'left_gaze_dir': array([ 0.98058057,  0.10336377, -0.16666579]),
+ 'left_gaze_origin': array([ 0., -5.,  0.]),
+ 'left_gaze_valid': False,
+ 'left_pupil_diam': 0.0,
+ 'left_pupil_posn': array([0., 0.]),
+ 'left_pupil_posn_valid': False,
+ 'right_eye_openness': 0.0,
+ 'right_eye_openness_valid': False,
+ 'right_gaze_dir': array([ 0.98058057,  0.10336377, -0.16666579]),
+ 'right_gaze_origin': array([0., 5., 0.]),
+ 'right_gaze_valid': False,
+ 'right_pupil_diam': 0.0,
+ 'right_pupil_posn': array([0., 0.]),
+ 'right_pupil_posn_valid': False,
+ 'steering_input': 0.0002929776965174824,
+ 'throttle_input': 0.0,
+ 'timestamp': 55.89655466005206,
+ 'timestamp_carla': 55896,
+ 'timestamp_device': 55533,
+ 'timestamp_stream': 55.89655466005206,
+ 'transform': [array([ 0.00987167, -0.00354858,  0.1648705 ]),
+               array([-0.0574214 , -0.02758213,  0.01046066])]}
+
+"""

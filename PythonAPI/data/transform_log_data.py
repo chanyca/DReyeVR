@@ -90,7 +90,7 @@ tab = {
 
 # txt
 __path__ = Path(__file__).resolve().parent
-log_path = f'{__path__}/vehicle_logs/log_auto_fw.txt'
+log_path = f'{__path__}/trials/trial_v_equal_vx.txt'
 
 with open(log_path) as rf:
     lines = rf.readlines()
