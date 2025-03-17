@@ -249,7 +249,8 @@ def main():
             backward = backward_btn_pressed_cnt % 2 == 1
 
             speed *= -1 if backward else 1
-            print(f"Speed: {speed:.2f} m/s")
+            # print(f"Speed: {speed:.2f} m/s")
+            print("Driving Direction: ", "Backward" if backward else "Forward")
             # vel_angle = np.arctan2(velocity[1], velocity[0])
             # sign_of_speed = sign(np.cos(vel_angle))
             # speed *= sign_of_speed
@@ -295,6 +296,9 @@ def main():
                 # vehicle_ego.set_target_velocity(carla.Vector3D(x=-1.0, y =0.0, z=0.0))
                 
                 haptic_control = HapticSharedControl(
+                    Cs=0.5,
+                    Kc=0.5,
+                    tp=1.0,
                     speed=speed,
                     desired_trajectory_params=param,
                     vehicle_config=vehicle_config,
@@ -331,11 +335,11 @@ def main():
                     coefficient_percentage=100,
                 )
                 # save wheel data
-                if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.txt"):
-                    with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "w") as f:
+                if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.csv"):
+                    with open(f"./logs/steering_wheel_log_{__current_time__}.csv", "w") as f:
                         f.write("Desired Steering Angle, Acceleration Pedal, Steering Wheel Angle\n")
                         
-                with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "a") as f:
+                with open(f"./logs/steering_wheel_log_{__current_time__}.csv", "a") as f:
                     f.write(f"{desired_steering_angle_deg},{controller.get_acceleration_pedal()},{controller.get_angle()}\n")
                 
                 # save carla sensor data

@@ -219,6 +219,8 @@ class HapticSharedControl:
 
         self.tp = tp  # preview time
         self.speed = speed  # vehicle speed
+        self.steering_ratio = 10
+        self.steering_error = 0.0
         self.vehicle_config = vehicle_config  # vehicle configuration
         self.vehicle = Vehicle(vehicle_config)
 
@@ -375,8 +377,10 @@ class HapticSharedControl:
             float: The steering wheel angle in degrees.
         """
         if not self.simulation:
-            return linear_fn(slope=28.809413448185634, 
-                             intercept=0.00036213148264344503)(sa_deg)
+            # return linear_fn(slope=28.809413448185634, 
+            #                  intercept=0.00036213148264344503)(sa_deg)
+            return linear_fn(slope=self.steering_ratio,
+                             intercept=0.0)(sa_deg)
         return linear_fn(1, 0)(sa_deg)
 
     def translate_swa_to_sa(self, swa_deg):
@@ -388,7 +392,7 @@ class HapticSharedControl:
             float: The steering angle in degrees.
         """
         if not self.simulation:
-            return linear_fn(slope=0.03466993588625678, 
+            return linear_fn(slope=1/self.steering_ratio, 
                              intercept=1.8142561990902186e-05)(swa_deg)
         return linear_fn(1, 0)(swa_deg)
 
