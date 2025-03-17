@@ -4,14 +4,13 @@ import sys
 import time
 from pprint import pprint
 
+import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle, save_sensor_data_to_csv
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
-
-import carla
 
 __current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
@@ -331,11 +330,11 @@ def main():
                     coefficient_percentage=100,
                 )
                 # save wheel data
-                if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.txt"):
-                    with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "w") as f:
+                if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.csv"):
+                    with open(f"./logs/steering_wheel_log_{__current_time__}.csv", "w") as f:
                         f.write("Desired Steering Angle, Acceleration Pedal, Steering Wheel Angle\n")
                         
-                with open(f"./logs/steering_wheel_log_{__current_time__}.txt", "a") as f:
+                with open(f"./logs/steering_wheel_log_{__current_time__}.csv", "a") as f:
                     f.write(f"{desired_steering_angle_deg},{controller.get_acceleration_pedal()},{controller.get_angle()}\n")
                 
                 # save carla sensor data
