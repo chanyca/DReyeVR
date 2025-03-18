@@ -297,7 +297,7 @@ def main():
                 haptic_control = HapticSharedControl(
                     Cs=0.5,
                     Kc=0.5,
-                    tp=1.0,
+                    tp=8.0,
                     speed=speed,
                     desired_trajectory_params=param,
                     vehicle_config=vehicle_config,
