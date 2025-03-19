@@ -4,13 +4,14 @@ import sys
 import time
 from pprint import pprint
 
-import carla
 import numpy as np
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle, save_sensor_data_to_csv
 from HapticSharedControl.haptic_algo import *
 from HapticSharedControl.path_planning import *
 from HapticSharedControl.utils import *
 from HapticSharedControl.wheel_control import *
+
+import carla
 
 __current_time__ = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 # cspell: ignore dreyevr dreyevrsensor libcarla harplab vergence numer linalg argparser Bezier polyfit arctan
@@ -297,11 +298,12 @@ def main():
                 haptic_control = HapticSharedControl(
                     Cs=0.5,
                     Kc=0.5,
-                    tp=8.0,
+                    tp=12.0,
                     speed=speed,
                     desired_trajectory_params=param,
                     vehicle_config=vehicle_config,
-                    simulation=False
+                    simulation=False,
+                    log_save_path=f"./logs/haptic_shared_control_log_{__current_time__}.csv"
                 )
                 haptic_control.debug = True
                 

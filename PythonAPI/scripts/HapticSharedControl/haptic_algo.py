@@ -210,7 +210,7 @@ class HapticSharedControl:
         speed=1.0,
         desired_trajectory_params=[],
         vehicle_config={},
-        log: bool = True,
+        log_save_path=None,
         simulation: bool = True,
     ):
         self.Cs = Cs
@@ -226,7 +226,7 @@ class HapticSharedControl:
 
         self.desired_trajectory_params = desired_trajectory_params
 
-        self.log = log
+        self.log_save_path = log_save_path
         self.simulation = simulation
 
         self.log_data = log_dict.copy()
@@ -457,7 +457,7 @@ class HapticSharedControl:
                 else:
                     print(f"{keys[i]}: {(values[i][-1])}")
 
-        if self.log:
+        if self.log_save_path:
             self.save_log()
 
     def save_log(self):
@@ -467,7 +467,8 @@ class HapticSharedControl:
         The method creates a CSV file if it doesn't exist, writing headers only once.
         It then appends the latest data point to the file each time it's called.
         """
-        file_path = f"./logs/haptic_shared_control_log_{__current_time__}.csv"
+        # file_path = f"./logs/haptic_shared_control_log_{__current_time__}.csv"
+        file_path = self.log_save_path
         file_exists = os.path.isfile(file_path)
         
         # Prepare the data structure
