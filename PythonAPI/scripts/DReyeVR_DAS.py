@@ -333,7 +333,7 @@ def main():
                 controller.play_spring_force(
                     offset_percentage=desired_offset,
                     saturation_percentage=100,
-                    coefficient_percentage=100,
+                    coefficient_percentage=30,
                 )
                 # save wheel data
                 if not os.path.exists(f"./logs/steering_wheel_log_{__current_time__}.csv"):

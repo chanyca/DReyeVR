@@ -121,7 +121,8 @@ def predict_position(
     # -- calculate the predicted yaw angle
     # -- calculate the predicted position
 
-    delta_phi_rad = rotating_direction * velocity * tp / turning_radius
+    # delta_phi_rad = rotating_direction * velocity * tp / turning_radius
+    delta_phi_rad = rotating_direction * sign(velocity) * 3.6 / turning_radius
 
     predict_yaw_angle_rad = current_yaw_angle_rad - delta_phi_rad
 
