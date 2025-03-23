@@ -1,530 +1,703 @@
-"""Using the Logitech G920 Driving Force Racing Wheel with Python
-Notes for G920
-    XInput vs. DirectInput: G920 is primarily an XInput device for Xbox/PC. In DirectInput mode (via Logitech drivers), it’s treated as a generic joystick, and mappings might differ from XInput’s standard layout. If you’re using XInput instead, DIJOYSTATE2 won’t apply—use XINPUT_STATE instead.
-    Force Feedback: G920 supports force feedback in DirectInput via effects, not directly through lFX fields (set up separately with IDirectInputEffect).
-    Customization: Use G HUB to adjust sensitivity or rotation (e.g., 900°), which affects lX scaling.
-Troubleshooting
-    No Input: Ensure G920 is in DirectInput mode and drivers are installed (G HUB or Logitech Gaming Software).
-    Unexpected Values: Adjust axis ranges with DIPROPRANGE via SetProperty if defaults don’t match (-1000 to 1000).
-    Button Misalignment: Test all buttons and adjust indices based on output.
+"""
+Logitech G920 Driving Force Racing Wheel Control Module
+
+This module provides a robust interface to the Logitech G920 steering wheel controller,
+handling force feedback, button mapping, and pedal input with comprehensive error handling.
 """
 
-import sys
-
-sys.path.append("../logidrivepy")
-import ctypes
 import gc
+import logging
+import sys
 import time
-from collections import defaultdict
-from pprint import pprint
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+
+# Add logidrivepy to path
+sys.path.append(str(Path(__file__).parent.parent / "logidrivepy"))
 from logidrivepy import LogitechController
 
-# Ignore spelling errors for any unknown words in this script
-# cspell:ignore logi logidrivepy DIJOYSTATE2 XINPUT_STATE IDirectInputEffect DIPROPRANGE
+# Constants
+MAX_ANGLE_RANGE = 900  # Maximum rotation range in degrees
+DEFAULT_SATURATION = 50
+DEFAULT_COEFFICIENT = 100
+AXIS_MAX_VALUE = 32767.0  # Maximum raw axis value
 
-MAX_ANGLE_RANGE = 900
-__current_time__ = time.time()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("WheelController")
 
 
 class WheelController:
-    def __init__(self):
-        self.controller_index = 0
+    """
+    Controller interface for Logitech G920 Driving Force Racing Wheel.
+    
+    This class provides methods to interact with the G920 wheel, including reading wheel position,
+    pedal states, button presses, and applying force feedback effects.
+    """
+    
+    def __init__(self, controller_index: int = 0, log_level: int = logging.INFO):
+        """
+        Initialize the wheel controller.
+        
+        Args:
+            controller_index: Index of the controller (default: 0)
+            log_level: Logging level (default: INFO)
+        
+        Raises:
+            RuntimeError: If controller initialization fails
+        """
+        # Set up logging
+        logger.setLevel(log_level)
+        
+        # Initialize controller
+        self.controller_index = controller_index
         self.controller = LogitechController()
-        self.controller.steering_initialize()
-
-        self.controller.set_operating_range(index=self.controller_index, range=MAX_ANGLE_RANGE)
-        print("\n---Logitech Controller Initialized---")
-        print("Is connected:", self.controller.is_connected(index=self.controller_index))
-        print(
-            "Force feedback available:",
-            self.controller.has_force_feedback(index=self.controller_index),
-        )
-        print(
-            "Operating range:",
-            self.controller.get_operating_range(index=self.controller_index, range=ctypes.c_int()),
-        )
-
-    def play_spring_force(
-        self, offset_percentage, saturation_percentage=50, coefficient_percentage=100
-    ):
-        """
-        Plays a spring force effect on the controller.
-        This function updates the controller state and then plays a spring force effect
-        with the specified parameters. The spring force effect is used to simulate a
-        spring-like resistance on the controller.
-        Args:
-            offset_percentage (int): The offset percentage for the spring force effect (-100 -> 100).
-            saturation_percentage (int, optional): The saturation percentage for the spring force effect (0 -> 100). Defaults to 50.
-            coefficient_percentage (int, optional): The coefficient percentage for the spring force effect (0 -> 100). Defaults to 100.
-        """
-
-        self.controller.logi_update()  # update the controller state before any operation
-        self.controller.play_spring_force(
-            index=self.controller_index,
-            offset_percentage=int(offset_percentage),
-            saturation_percentage=int(saturation_percentage),
-            coefficient_percentage=int(coefficient_percentage),
-        )
-
-    def stop_spring_force(self):
-        """
-        Stops the spring force feedback on the controller.
-        This method updates the controller state and then stops the spring force
-        feedback for the controller at the specified index.
-        """
-
-        self.controller.logi_update()
-        self.controller.stop_spring_force(index=self.controller_index)
-
-    def get_state_engines(self):
-        """
-                Retrieves the state of the engines from the controller.
-                This method updates the controller state and retrieves various parameters
-                related to the engine's state, such as position, rotation, velocity,
-                acceleration, and force along different axes, as well as slider, POV,
-                and button states.
-                Returns:
-                    dict: A dictionary containing the following keys and their corresponding values:
-                        - "lX": int, position along the X-axis
-                        - "lY": int, position along the Y-axis
-                        - "lZ": int, position along the Z-axis (often unused)
-                        - "lRx": int, rotation around the X-axis
-                        - "lRy": int, rotation around the Y-axis
-                        - "lRz": int, rotation around the Z-axis (Rudder or twist)
-                        - "rglSlider": list of int, slider positions (L2/R2)
-                        - "rgdwPOV": list of int, POV hat switch positions (rgdwPOV[0]: The D-pad. Reported in hundredths of a degree (0° = up, 9000 = right, 18000 = down, 27000 = left, -1 = centered). Logitech D-pads typically support 8 directions.
-        Other POV entries (rgdwPOV[1-3]) are unused unless the device has multiple hats)
-                        - "rgbButtons": list of int, button states (0: A, 1: B, 2: X, 3: Y, 4: L1, 5: R1, 6: Select, 7: Start, 8: Mode (Logitech button), 9: Left stick click, 10: Right stick click)
-                        - "lVX": int, velocity along the X-axis
-                        - "lVY": int, velocity along the Y-axis
-                        - "lVZ": int, velocity along the Z-axis
-                        - "lVRx": int, rotational velocity around the X-axis
-                        - "lVRy": int, rotational velocity around the Y-axis
-                        - "lVRz": int, rotational velocity around the Z-axis
-                        - "rglVSlider": list of int, slider velocities
-                        - "lAX": int, acceleration along the X-axis
-                        - "lAY": int, acceleration along the Y-axis
-                        - "lAZ": int, acceleration along the Z-axis
-                        - "lARx": int, rotational acceleration around the X-axis
-                        - "lARy": int, rotational acceleration around the Y-axis
-                        - "lARz": int, rotational acceleration around the Z-axis
-                        - "rglASlider": list of int, slider accelerations
-                        - "lFX": int, force along the X-axis
-                        - "lFY": int, force along the Y-axis
-                        - "lFZ": int, force along the Z-axis
-                        - "lFRx": int, rotational force around the X-axis
-                        - "lFRy": int, rotational force around the Y-axis
-                        - "lFRz": int, rotational force around the Z-axis
-                        - "rglFSlider": list of int, slider forces
-        """
-
-        # cspell: ignore rgdw
-        self.controller.logi_update()
-        state_contents = self.controller.get_state_engines(self.controller_index).contents
-        return {
-            "lX": state_contents.lX,
-            "lY": state_contents.lY,
-            "lZ": state_contents.lZ,
-            "lRx": state_contents.lRx,
-            "lRy": state_contents.lRy,
-            "lRz": state_contents.lRz,
-            "rglSlider": list(state_contents.rglSlider),
-            "rgdwPOV": list(state_contents.rgdwPOV),
-            "rgbButtons": list(state_contents.rgbButtons),
-            "lVX": state_contents.lVX,
-            "lVY": state_contents.lVY,
-            "lVZ": state_contents.lVZ,
-            "lVRx": state_contents.lVRx,
-            "lVRy": state_contents.lVRy,
-            "lVRz": state_contents.lVRz,
-            "rglVSlider": list(state_contents.rglVSlider),
-            "lAX": state_contents.lAX,
-            "lAY": state_contents.lAY,
-            "lAZ": state_contents.lAZ,
-            "lARx": state_contents.lARx,
-            "lARy": state_contents.lARy,
-            "lARz": state_contents.lARz,
-            "rglASlider": list(state_contents.rglASlider),
-            "lFX": state_contents.lFX,
-            "lFY": state_contents.lFY,
-            "lFZ": state_contents.lFZ,
-            "lFRx": state_contents.lFRx,
-            "lFRy": state_contents.lFRy,
-            "lFRz": state_contents.lFRz,
-            "rglFSlider": list(state_contents.rglFSlider),
-        }
-
-    def get_angle(self, translate=True):
-        """
-        Retrieves the angle of the wheel control.
-        Args:
-            translate (bool): If True, the angle is normalized to the range [-1.0, 1.0].
-                              If False, the raw angle value is returned.
-        Returns:
-            float: The angle of the wheel control. If `translate` is True, the value is
-                   normalized to the range [-1.0, 1.0]. If `translate` is False, the raw
-                   angle value is returned.
-        """
-        self.controller.logi_update()
-        if not translate:
-            return self.get_state_engines()["lX"]
-        else:
-            return np.clip(self.get_state_engines()["lX"], -32767.0, 32767.0) / 32767.0
-
-    def get_acceleration_pedal(self, translate=True):
-        """
-        Retrieves the current state of the acceleration pedal.
-        Args:
-            translate (bool): If True, translates the raw pedal value to a normalized range [0, 1].
-                              If False, returns the raw pedal value.
-        Returns:
-            float: The state of the acceleration pedal. If `translate` is True, returns a normalized
-                   value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
-        """
-        self.controller.logi_update()
-        if not translate:
-            return self.get_state_engines()["lY"]
-        else:
-            return np.clip(self.get_state_engines()["lY"], -32767.0, 32767.0) / 32767.0
-
-    def get_brake_pedal(self, translate=True):
-        """
-        Retrieves the current state of the brake pedal.
-        Args:
-            translate (bool): If True, translates the raw pedal value to a normalized range [0, 1].
-                              If False, returns the raw pedal value.
-        Returns:
-            float: The state of the brake pedal. If `translate` is True, returns a normalized
-                   value between 0 and 1. If `translate` is False, returns the raw value from the engine state.
-        """
-        self.controller.logi_update()
-        if not translate:
-            return self.get_state_engines()["lRZ"]
-        else:
-            return abs(self.get_state_engines()["lRZ"] - 32767.0) / 65535.0
-
-    def get_buttons_pressed(self):
-        """
-        Retrieves and processes the current state of buttons on the steering wheel controller.
-        This method reads the current state of the controller, processes the D-pad and button inputs,
-        and returns a dictionary mapping button names to their current states.
-        Returns:
-            dict: A dictionary with the following keys:
-                - "D-pad": str - Direction of the D-pad ("up", "right", "down", "left", or "center")
-                - "A": bool - True if A button is pressed, False otherwise
-                - "B": bool - True if B button is pressed, False otherwise
-                - "X": bool - True if X button is pressed, False otherwise
-                - "Y": bool - True if Y button is pressed, False otherwise
-        Note:
-            This method requires the controller to be initialized and connected.
-            Uses `logi_update()` to get the latest input state from the controller.
-        """
-
-        def process_dpad(value):
-            if value == 0:
-                return "up"
-            elif value == 9000:
-                return "right"
-            elif value == 18000:
-                return "down"
-            elif value == 27000:
-                return "left"
-            return "center"
-
-        def process_buttons(value):
-            if value != 0:
-                return True
-            return False
-
-        self.controller.logi_update()
-
-        states = self.get_state_engines()
-
-        rgdwPOV = states["rgdwPOV"]
-        rgbButtons = states["rgbButtons"]
-
-        key_mapping = {
-            "D-pad": process_dpad(rgdwPOV[0]),
-            "A": process_buttons(rgbButtons[0]),
-            "B": process_buttons(rgbButtons[1]),
-            "X": process_buttons(rgbButtons[2]),
-            "Y": process_buttons(rgbButtons[3]),
-        }
-        return key_mapping
-
-    def exit(self):
-        """
-        Shuts down the steering controller and releases the resources.
-        """
-        self.controller.logi_update()
-        self.controller.steering_shutdown()
-        del self.controller
-        gc.collect()
-
-
-# --- Test functions ---
-def record_states(controller, duration=10):
-    """
-    Records the states of the controller for a specified duration.
-    Args:
-        controller (WheelController): The wheel controller object.
-        duration (int, optional): The duration for which to record the states. Defaults to 10.
-    Returns:
-        dict: A dictionary containing the recorded states.
-    """
-    states = {}
-    start_time = time.time()
-    while time.time() - start_time < duration:
-        curr_state = controller.get_state_engines()
-        if states == {}:
-            states = curr_state
-            continue
-
-        for (curr_key, curr_values), (key, value) in zip(curr_state.items(), states.items()):
-            if states[key] != curr_values and key != "lAZ":
-                print(f"{key}: {value} --> {curr_values}")
-
-        states = curr_state
-        print("----")
-        time.sleep(0.5)
-    return
-
-
-def spin_controller_full_test(controller):
-    df = {}
-
-    for sat in range(10, 101, 5):
-        print(f"Saturation: {sat}", end=" | ")
-        for coef in range(10, 101, 5):
-            print(f"Coefficient: {coef}", end="\n")
-            for offset in range(-100, 101, 1):
-                print(f"Offset: {offset}", end="\n")
-                # -i * 45 + 90
-                # -4 ~ -18
-                # -45 ~ -200
-                controller.play_spring_force(
-                    offset_percentage=offset,
-                    saturation_percentage=sat,
-                    coefficient_percentage=coef,
-                )
-
-                state = controller.get_state_engines()
-                # export to csv
-                df.setdefault("timestamp", []).append(str(time.time()))
-                for key, value in vars(state).items():
-                    df.setdefault(key, []).append(value)
-
-                time.sleep(0.3)
-            time.sleep(1)
-        time.sleep(2)
-
-    df = pd.DataFrame().from_dict(df)
-    df.to_excel("spin_test_offset.xlsx", index=False)
-    controller.stop_spring_force()
-
-
-def spin_controller_forward_reverse_test(controller) -> None:
-    def spin_test(controller, range_: list, step: int, forward: bool = True) -> dict:
-        df = {}
-        print("Waiting for 3 seconds")
-        time.sleep(3)
-        print("--------------------")
-        start, end = range_ if forward else range_[::-1]
-        end += 1 if forward else -1
-        step = step if forward else -step
-        for offset in range(start, end, step):
-            print(f"//=====\nOffset: {offset}", end="\n")
-            print(f"Angle before: {round(controller.get_angle() * 450, 1)}", end=" --> ")
-            # play spring force
-            controller.play_spring_force(
-                offset_percentage=offset,
-                saturation_percentage=100,
-                coefficient_percentage=100,
-            )
-
-            time.sleep(2.0)
-            state = controller.get_state_engines()
-
-            # export to csv
-            df.setdefault("timestamp", []).append(str(time.time()))
-            for key, value in state.items():
-                df.setdefault(key, []).append(value)
-
-            print(f"Angle after: {round(controller.get_angle() * 450, 1)}")
-            print(f"Acceleration: {controller.get_acceleration_pedal()}")
-        return df
-
-    data = {}
-    print("\nForward test")
-    temp = spin_test(controller, range_=(-100, 100), step=20, forward=True)
-    controller.stop_spring_force()
-    time.sleep(3)
-    data = append_dict(data, temp)
-
-    print("\nReverse test")
-    temp = spin_test(controller, range_=(-100, 100), step=20, forward=False)
-    controller.stop_spring_force()
-    time.sleep(3)
-    data = append_dict(data, temp)
-
-    print("\nForward test")
-    temp = spin_test(controller, range_=(-100, 100), step=20, forward=True)
-    controller.stop_spring_force()
-    time.sleep(3)
-    data = append_dict(data, temp)
-
-    print("\nReverse test")
-    temp = spin_test(controller, range_=(-100, 100), step=20, forward=False)
-    controller.stop_spring_force()
-    time.sleep(3)
-    data = append_dict(data, temp)
-
-    # export to excel
-    df = pd.DataFrame().from_dict(data)
-    df.to_excel("spin_test_offset_forward0.xlsx", index=False)
-    print("Forward-reverse test done.")
-    time.sleep(1)
-    controller.exit()
-    
-def spin_controller_state_test(controller):
-    def spin_test(controller, offset, saturation_percentage, coefficient_percentage, time_step=0.01):
-        df = {}
-        print("--------------------")
-        # *1 stay for a while
-        print("#1: Waiting for 2 seconds")
-        start_time = time.time()
-        while time.time() - start_time < 2:
-            time.sleep(time_step)
-            pass
-        print("---Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
         
-        # *2 play spring force to reach the desired value
-        print("#2: Playing spring force to reach the desired value", offset)
-        # play spring force
-        controller.play_spring_force(
-            offset_percentage=int(offset),
-            saturation_percentage=int(saturation_percentage),
-            coefficient_percentage=int(coefficient_percentage),
-        )
-        if coefficient_percentage != 0:
-            sign = coefficient_percentage / abs(coefficient_percentage)
-        else:
-            sign = 1
-
-        # reach the value
-        print("---Offset angle:", (offset / 100) * (MAX_ANGLE_RANGE / 2))
-        error = abs((controller.get_angle() - sign * (offset/ 100)) * 450)
-        start_time = time.time()
-        while error > 1: # 1 degree
-            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
-            df.setdefault("State", []).append("Turning")
-            df.setdefault("Offset", []).append(offset)
-            df.setdefault("Saturation", []).append(saturation_percentage)
-            df.setdefault("Coefficient", []).append(coefficient_percentage)
-            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
-            time.sleep(time_step)
-            error = abs((controller.get_angle() - sign * (offset/ 100)) * 450)
+        # Initialize wheel
+        init_success = self.controller.steering_initialize()
+        if not init_success:
+            raise RuntimeError("Failed to initialize Logitech controller. Check connection and drivers.")
             
-            if time.time() - start_time > 10:
-                print("Timeout...", "Error:", error)
-                break
-
-        print("---Reach:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
-        print("---Completed in", time.time() - start_time, "seconds")
+        # Set wheel operating range
+        self.controller.set_operating_range(index=self.controller_index, range=MAX_ANGLE_RANGE)
         
-        # *3 stay for a while
-        print("#3: Waiting for 3 seconds to be stable")
+        # Cache for reducing state queries
+        self._state_cache = None
+        self._last_update_time = 0
+        self._cache_validity_ms = 10  # Cache valid for 10ms
+        
+        # Log initialization details
+        self._log_controller_info()
+    
+    def _log_controller_info(self) -> None:
+        """Log controller initialization details"""
+        logger.info("Logitech Controller Initialized")
+        logger.info(f"Connected: {self.controller.is_connected(index=self.controller_index)}")
+        logger.info(f"Force feedback available: {self.controller.has_force_feedback(index=self.controller_index)}")
+        
+        operating_range = self.controller.get_operating_range(
+            index=self.controller_index, 
+            range=self.controller.c_int()
+        )
+        logger.info(f"Operating range: {operating_range} degrees")
+    
+    def _update_state(self, force: bool = False) -> None:
+        """
+        Update the controller state.
+        
+        Args:
+            force: Force update even if cache is valid
+        """
+        current_time = time.time() * 1000  # Convert to milliseconds
+        
+        # Update if cache is invalid or forced update
+        if force or (current_time - self._last_update_time > self._cache_validity_ms):
+            self.controller.logi_update()
+            self._state_cache = self.controller.get_state_engines(self.controller_index).contents
+            self._last_update_time = current_time
+    
+    def play_spring_force(
+        self, 
+        offset_percentage: int, 
+        saturation_percentage: int = DEFAULT_SATURATION, 
+        coefficient_percentage: int = DEFAULT_COEFFICIENT
+    ) -> bool:
+        """
+        Apply spring force effect to the steering wheel.
+        
+        Args:
+            offset_percentage: Center point offset (-100 to 100)
+            saturation_percentage: Force saturation (0 to 100)
+            coefficient_percentage: Spring stiffness (0 to 100)
+        
+        Returns:
+            bool: Success status
+        
+        Notes:
+            - offset_percentage: Controls the center position of the spring
+              -100 = full left, 0 = center, 100 = full right
+            - saturation_percentage: Controls maximum force applied
+              0 = no force, 100 = maximum force
+            - coefficient_percentage: Controls spring stiffness
+              0 = no resistance, 100 = maximum resistance
+        """
+        try:
+            self._update_state(force=True)
+            
+            # Ensure values are within valid ranges
+            offset = max(-100, min(100, int(offset_percentage)))
+            saturation = max(0, min(100, int(saturation_percentage)))
+            coefficient = max(0, min(100, int(coefficient_percentage)))
+            
+            success = self.controller.play_spring_force(
+                index=self.controller_index,
+                offset_percentage=offset,
+                saturation_percentage=saturation,
+                coefficient_percentage=coefficient,
+            )
+            
+            if not success:
+                logger.warning(f"Failed to apply spring force: {offset}, {saturation}, {coefficient}")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error applying spring force: {e}")
+            return False
+    
+    def stop_spring_force(self) -> bool:
+        """
+        Stop spring force feedback effect.
+        
+        Returns:
+            bool: Success status
+        """
+        try:
+            self._update_state(force=True)
+            success = self.controller.stop_spring_force(index=self.controller_index)
+            
+            if not success:
+                logger.warning("Failed to stop spring force")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error stopping spring force: {e}")
+            return False
+    
+    def get_state_engines(self) -> Dict[str, Any]:
+        """
+        Get complete controller state including all axes, buttons, and forces.
+        
+        Returns:
+            Dict containing all controller state parameters
+        """
+        try:
+            self._update_state()
+            
+            # Create dictionary of all state values
+            return {
+                # Position axes
+                "lX": self._state_cache.lX,
+                "lY": self._state_cache.lY,
+                "lZ": self._state_cache.lZ,
+                "lRx": self._state_cache.lRx,
+                "lRy": self._state_cache.lRy,
+                "lRz": self._state_cache.lRz,
+                "rglSlider": list(self._state_cache.rglSlider),
+                
+                # D-pad and buttons
+                "rgdwPOV": list(self._state_cache.rgdwPOV),
+                "rgbButtons": list(self._state_cache.rgbButtons),
+                
+                # Velocity
+                "lVX": self._state_cache.lVX,
+                "lVY": self._state_cache.lVY,
+                "lVZ": self._state_cache.lVZ,
+                "lVRx": self._state_cache.lVRx,
+                "lVRy": self._state_cache.lVRy,
+                "lVRz": self._state_cache.lVRz,
+                "rglVSlider": list(self._state_cache.rglVSlider),
+                
+                # Acceleration
+                "lAX": self._state_cache.lAX,
+                "lAY": self._state_cache.lAY,
+                "lAZ": self._state_cache.lAZ,
+                "lARx": self._state_cache.lARx,
+                "lARy": self._state_cache.lARy,
+                "lARz": self._state_cache.lARz,
+                "rglASlider": list(self._state_cache.rglASlider),
+                
+                # Force
+                "lFX": self._state_cache.lFX,
+                "lFY": self._state_cache.lFY,
+                "lFZ": self._state_cache.lFZ,
+                "lFRx": self._state_cache.lFRx,
+                "lFRy": self._state_cache.lFRy,
+                "lFRz": self._state_cache.lFRz,
+                "rglFSlider": list(self._state_cache.rglFSlider),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting state: {e}")
+            # Return empty state on error
+            return {}
+    
+    def get_angle(self, translate: bool = True) -> float:
+        """
+        Get steering wheel angle.
+        
+        Args:
+            translate: If True, normalize to [-1.0, 1.0] range
+        
+        Returns:
+            float: Wheel angle (normalized or raw)
+        """
+        try:
+            self._update_state()
+            
+            raw_value = self._state_cache.lX
+            
+            if not translate:
+                return raw_value
+            else:
+                return np.clip(raw_value / AXIS_MAX_VALUE, -1.0, 1.0)
+                
+        except Exception as e:
+            logger.error(f"Error getting wheel angle: {e}")
+            return 0.0
+    
+    def get_acceleration_pedal(self, translate: bool = True) -> float:
+        """
+        Get acceleration pedal position.
+        
+        Args:
+            translate: If True, normalize to [0, 1] range
+        
+        Returns:
+            float: Pedal position (normalized or raw)
+        """
+        try:
+            self._update_state()
+            
+            raw_value = self._state_cache.lY
+            
+            if not translate:
+                return raw_value
+            else:
+                # Map from [-32767, 32767] to [0, 1]
+                # Note: For acceleration, higher raw value = more pressed
+                return np.clip((raw_value + AXIS_MAX_VALUE) / (2 * AXIS_MAX_VALUE), 0.0, 1.0)
+                
+        except Exception as e:
+            logger.error(f"Error getting acceleration pedal: {e}")
+            return 0.0
+    
+    def get_brake_pedal(self, translate: bool = True) -> float:
+        """
+        Get brake pedal position.
+        
+        Args:
+            translate: If True, normalize to [0, 1] range
+        
+        Returns:
+            float: Pedal position (normalized or raw)
+        """
+        try:
+            self._update_state()
+            
+            raw_value = self._state_cache.lRz
+            
+            if not translate:
+                return raw_value
+            else:
+                # Brake is fully released at 32767, fully pressed at -32768
+                # Map to [0, 1] where 1 is fully pressed
+                return np.clip(abs(raw_value - AXIS_MAX_VALUE) / (2 * AXIS_MAX_VALUE), 0.0, 1.0)
+                
+        except Exception as e:
+            logger.error(f"Error getting brake pedal: {e}")
+            return 0.0
+    
+    def get_buttons_pressed(self) -> Dict[str, Union[str, bool]]:
+        """
+        Get status of wheel buttons and D-pad.
+        
+        Returns:
+            Dict containing button states:
+                - "D-pad": Direction ("up", "right", "down", "left", "center")
+                - "A", "B", "X", "Y": Boolean button states
+        """
+        try:
+            self._update_state()
+            
+            # Extract D-pad and button values
+            rgdwPOV = list(self._state_cache.rgdwPOV)
+            rgbButtons = list(self._state_cache.rgbButtons)
+            
+            # Process D-pad values
+            dpad_direction = self._process_dpad(rgdwPOV[0])
+            
+            # Process buttons (first 4 buttons: A, B, X, Y)
+            button_states = {
+                "D-pad": dpad_direction,
+                "A": self._process_button(rgbButtons[0]),
+                "B": self._process_button(rgbButtons[1]),
+                "X": self._process_button(rgbButtons[2]),
+                "Y": self._process_button(rgbButtons[3]),
+            }
+            
+            return button_states
+            
+        except Exception as e:
+            logger.error(f"Error getting button states: {e}")
+            return {"D-pad": "center", "A": False, "B": False, "X": False, "Y": False}
+    
+    def _process_dpad(self, value: int) -> str:
+        """
+        Process D-pad value into direction.
+        
+        Args:
+            value: Raw D-pad value
+        
+        Returns:
+            str: Direction as string
+        """
+        # Map POV values to directions (in hundredths of degrees)
+        if value == 0:
+            return "up"
+        elif value == 9000:
+            return "right"
+        elif value == 18000:
+            return "down"
+        elif value == 27000:
+            return "left"
+        return "center"
+    
+    def _process_button(self, value: int) -> bool:
+        """
+        Process button value to boolean state.
+        
+        Args:
+            value: Raw button value
+        
+        Returns:
+            bool: True if button is pressed
+        """
+        return value != 0
+    
+    def exit(self) -> None:
+        """
+        Clean up controller resources.
+        """
+        try:
+            self._update_state(force=True)
+            self.stop_spring_force()
+            self.controller.steering_shutdown()
+            del self.controller
+            gc.collect()
+            logger.info("Steering controller shutdown successful")
+        except Exception as e:
+            logger.error(f"Error during controller shutdown: {e}")
+
+
+class WheelTester:
+    """
+    Test utility for the wheel controller.
+    
+    Provides methods to test different aspects of the wheel controller:
+    - Recording states
+    - Profiling spring force behavior
+    - Testing force feedback parameters systematically
+    """
+    
+    def __init__(self, controller: WheelController):
+        """
+        Initialize the wheel tester.
+        
+        Args:
+            controller: Wheel controller instance
+        """
+        self.controller = controller
+        self.test_start_time = time.time()
+        self.logger = logging.getLogger("WheelTester")
+    
+    def record_states(self, duration: int = 10, interval: float = 0.5) -> Dict:
+        """
+        Record and monitor controller states for a specified duration.
+        
+        Args:
+            duration: Recording duration in seconds
+            interval: Sampling interval in seconds
+        
+        Returns:
+            Dict of final controller state
+        """
+        self.logger.info(f"Recording states for {duration} seconds...")
+        states = {}
         start_time = time.time()
         
-        while time.time() - start_time < 3:
-            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
-            df.setdefault("State", []).append("Stabilizing")
-            df.setdefault("Offset", []).append(offset)
-            df.setdefault("Saturation", []).append(saturation_percentage)
-            df.setdefault("Coefficient", []).append(coefficient_percentage)
-            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
-            time.sleep(time_step)
+        while time.time() - start_time < duration:
+            curr_state = self.controller.get_state_engines()
+            
+            # Initialize states dict if empty
+            if not states:
+                states = curr_state.copy()
+                continue
+            
+            # Log changes in state
+            for (curr_key, curr_values), (key, value) in zip(curr_state.items(), states.items()):
+                if states[key] != curr_values and key != "lAZ":  # Ignore acceleration Z which changes frequently
+                    print(f"{key}: {value} --> {curr_values}")
+            
+            states = curr_state.copy()
+            print("----")
+            time.sleep(interval)
         
-        print("---Current angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        self.logger.info("State recording completed")
+        return states
+    
+    def test_force_feedback_profile(self, 
+                                   offset_range: Tuple[int, int] = (-100, 100),
+                                   sat_range: Tuple[int, int] = (10, 100),
+                                   coef_range: Tuple[int, int] = (10, 100),
+                                   step_size: int = 5) -> pd.DataFrame:
+        """
+        Test all combinations of force feedback parameters.
         
-        # *4 return to the center
-        print("#4: Returning to center")
+        Args:
+            offset_range: Range of offset values (min, max)
+            sat_range: Range of saturation values (min, max)
+            coef_range: Range of coefficient values (min, max)
+            step_size: Step size for parameter increments
         
-        controller.play_spring_force(offset_percentage=int(0), 
-                                     saturation_percentage=int(100), 
-                                     coefficient_percentage=int((sign)*coefficient_percentage)) # reverse side
-        #NOTE: sign of turning direction coef = sign of reversing direction coef
+        Returns:
+            DataFrame of test results
+        """
+        self.logger.info("Starting comprehensive force feedback test...")
+        df_data = {}
         
-        start_time = time.time()
-        while time.time() - start_time < 3:
-            df.setdefault("timestamp", []).append(str(time.time() - __current_time__))
-            df.setdefault("State", []).append("Centering")
-            df.setdefault("Offset", []).append(0)
-            df.setdefault("Saturation", []).append(100)
-            df.setdefault("Coefficient", []).append(int((sign)*coefficient_percentage))
-            df.setdefault("SWA (Measured)", []).append(controller.get_angle() * (MAX_ANGLE_RANGE / 2))
-            time.sleep(time_step)
-
-        print("---Return to angle:", controller.get_angle() * (MAX_ANGLE_RANGE / 2))
+        # Test all combinations of parameters
+        for sat in range(sat_range[0], sat_range[1] + 1, step_size):
+            print(f"Saturation: {sat}")
+            for coef in range(coef_range[0], coef_range[1] + 1, step_size):
+                print(f"  Coefficient: {coef}")
+                for offset in range(offset_range[0], offset_range[1] + 1, step_size):
+                    print(f"    Offset: {offset}", end="\r")
+                    
+                    # Apply force feedback
+                    self.controller.play_spring_force(
+                        offset_percentage=offset,
+                        saturation_percentage=sat,
+                        coefficient_percentage=coef,
+                    )
+                    
+                    # Record state
+                    time.sleep(0.1)  # Allow time for force to apply
+                    state = self.controller.get_state_engines()
+                    
+                    # Store data
+                    timestamp = time.time() - self.test_start_time
+                    df_data.setdefault("timestamp", []).append(timestamp)
+                    df_data.setdefault("offset", []).append(offset)
+                    df_data.setdefault("saturation", []).append(sat)
+                    df_data.setdefault("coefficient", []).append(coef)
+                    df_data.setdefault("wheel_angle", []).append(self.controller.get_angle() * MAX_ANGLE_RANGE / 2)
+                    
+                    # Add all state parameters
+                    for key, value in state.items():
+                        if isinstance(value, (int, float)):
+                            df_data.setdefault(key, []).append(value)
+                        elif isinstance(value, (list, tuple)):
+                            # Handle first element of lists (most relevant)
+                            if value:
+                                df_data.setdefault(f"{key}_0", []).append(value[0])
+        
+        # Create DataFrame
+        df = pd.DataFrame(df_data)
+        
+        # Save results
+        output_file = f"wheel_test_profile_{time.strftime('%Y%m%d_%H%M%S')}.xlsx"
+        df.to_excel(output_file, index=False)
+        self.logger.info(f"Force feedback test completed. Results saved to {output_file}")
+        
+        # Stop forces
+        self.controller.stop_spring_force()
+        
         return df
     
-    # === Test ===
-    data = {}
-    controller.play_spring_force(offset_percentage=0, 
-                                 saturation_percentage=100, 
-                                 coefficient_percentage=100)
-    time.sleep(3)
-    coef_range = [-100, 100]
-    offset_range = [-100, 100]
-    sat_range = [10, 100]
+    def test_force_response(self, 
+                           offset: int, 
+                           saturation: int, 
+                           coefficient: int,
+                           duration: float = 5.0,
+                           sample_rate: float = 100) -> pd.DataFrame:
+        """
+        Test wheel response to a specific force feedback configuration over time.
+        
+        Args:
+            offset: Center offset value (-100 to 100)
+            saturation: Saturation value (0 to 100)
+            coefficient: Coefficient value (0 to 100)
+            duration: Test duration in seconds
+            sample_rate: Samples per second
+        
+        Returns:
+            DataFrame of response data
+        """
+        self.logger.info(f"Testing response to offset={offset}, sat={saturation}, coef={coefficient}")
+        
+        # Calculate time step
+        time_step = 1.0 / sample_rate
+        
+        # Initialize result data
+        df_data = {
+            "timestamp": [],
+            "offset": [],
+            "saturation": [],
+            "coefficient": [],
+            "wheel_angle": [],
+            "wheel_angle_normalized": [],
+            "phase": []
+        }
+        
+        # Phase 1: Reset to center
+        self._run_test_phase(
+            df_data, "Centering",
+            0, 100, 100,  # Full force to center
+            2.0, time_step
+        )
+        
+        # Phase 2: Apply test force
+        self._run_test_phase(
+            df_data, "Testing",
+            offset, saturation, coefficient,
+            duration, time_step
+        )
+        
+        # Phase 3: Return to center
+        self._run_test_phase(
+            df_data, "Returning",
+            0, 100, 100,  # Full force to center
+            2.0, time_step
+        )
+        
+        # Create DataFrame
+        df = pd.DataFrame(df_data)
+        
+        # Save results
+        output_file = f"wheel_response_o{offset}_s{saturation}_c{coefficient}_{time.strftime('%Y%m%d_%H%M%S')}.xlsx"
+        df.to_excel(output_file, index=False)
+        self.logger.info(f"Response test completed. Results saved to {output_file}")
+        
+        return df
     
-    for offset in range(offset_range[0], offset_range[-1] + 1, 20):
-        if offset == 0:
-            continue
-        for coef in range(coef_range[0], coef_range[-1] + 1, 20):
-            if coef == 0:
-                continue          
-            for sat in range(sat_range[0], sat_range[-1] + 1, 10):
-                print(f"\n>> Offset: {offset}% \t| Saturation: {sat}% \t| Coefficient: {coef}%")
-                temp = spin_test(controller, offset, sat, coef, time_step=0.001) # 10ms
-                data = append_dict(data, temp)
-                time.sleep(3.0)
-   
-    controller.stop_spring_force() 
-    
-    
-    df = pd.DataFrame().from_dict(data)
-    df.to_excel("spin_test_stat_2.xlsx", index=False)
-    print("State test done.")
-    time.sleep(1)
-    controller.exit()
+    def _run_test_phase(self, 
+                      df_data: Dict[str, List], 
+                      phase_name: str,
+                      offset: int, 
+                      saturation: int, 
+                      coefficient: int,
+                      duration: float,
+                      time_step: float) -> None:
+        """
+        Run a single phase of the response test.
+        
+        Args:
+            df_data: Dictionary to store results
+            phase_name: Name of the test phase
+            offset: Center offset value
+            saturation: Saturation value
+            coefficient: Coefficient value
+            duration: Phase duration in seconds
+            time_step: Sampling interval in seconds
+        """
+        # Apply force
+        self.controller.play_spring_force(
+            offset_percentage=offset,
+            saturation_percentage=saturation,
+            coefficient_percentage=coefficient
+        )
+        
+        # Record data for duration
+        start_time = time.time()
+        while time.time() - start_time < duration:
+            current_time = time.time() - self.test_start_time
+            wheel_angle = self.controller.get_angle(translate=False)
+            wheel_angle_degrees = self.controller.get_angle(translate=True) * MAX_ANGLE_RANGE / 2
+            
+            # Store data
+            df_data["timestamp"].append(current_time)
+            df_data["phase"].append(phase_name)
+            df_data["offset"].append(offset)
+            df_data["saturation"].append(saturation)
+            df_data["coefficient"].append(coefficient)
+            df_data["wheel_angle"].append(wheel_angle_degrees)
+            df_data["wheel_angle_normalized"].append(wheel_angle / AXIS_MAX_VALUE)
+            
+            # Sleep for precise timing
+            next_sample = start_time + (time.time() - start_time) // time_step * time_step + time_step
+            sleep_time = max(0, next_sample - time.time())
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
 
-def append_dict(d1, d2):
-    for key, value in d2.items():
-        d1.setdefault(key, []).extend(value)
-    return d1
+# Main test functions
+def main_test():
+    """Run basic controller tests"""
+    try:
+        # Initialize controller
+        controller = WheelController()
+        
+        # Create tester
+        tester = WheelTester(controller)
+        
+        # Run monitoring test
+        print("Starting controller state monitor. Press Ctrl+C to stop.")
+        tester.record_states(duration=30)
+        
+        # Clean up
+        controller.exit()
+        print("Test completed successfully.")
+        
+    except KeyboardInterrupt:
+        print("\nTest interrupted by user.")
+        if 'controller' in locals():
+            controller.exit()
+        
+    except Exception as e:
+        print(f"Test failed: {e}")
+        if 'controller' in locals():
+            controller.exit()
 
 
-def spin_test():
-    controller = WheelController()
-    spin_controller_forward_reverse_test(controller)
-    # spin_controller_full_test(controller)
-    # spin_controller_state_test(controller)
-    print("Spin test passed.\n")
-
-
-def test_controller():
-    controller = WheelController()
-    record_states(controller, duration=100)
-    controller.exit()
-    print("Test passed.")
+def force_feedback_test():
+    """Run force feedback tests"""
+    try:
+        # Initialize controller
+        controller = WheelController()
+        
+        # Create tester
+        tester = WheelTester(controller)
+        
+        # Run targeted tests
+        for offset in [-80, -40, 0, 40, 80]:
+            tester.test_force_response(
+                offset=offset,
+                saturation=100,
+                coefficient=50,
+                duration=3.0
+            )
+            time.sleep(1)
+        
+        # Clean up
+        controller.exit()
+        print("Force feedback test completed successfully.")
+        
+    except KeyboardInterrupt:
+        print("\nTest interrupted by user.")
+        if 'controller' in locals():
+            controller.exit()
+        
+    except Exception as e:
+        print(f"Test failed: {e}")
+        if 'controller' in locals():
+            controller.exit()
 
 
 if __name__ == "__main__":
-    # spin_test()
-    test_controller()
-    print("Done.")
+    # Select test to run
+    test_type = "basic"
+    
+    if test_type == "basic":
+        main_test()
+    elif test_type == "force":
+        force_feedback_test()
+    else:
+        print(f"Unknown test type: {test_type}")
