@@ -5,6 +5,7 @@ This module provides a robust interface to the Logitech G920 steering wheel cont
 handling force feedback, button mapping, and pedal input with comprehensive error handling.
 """
 
+import ctypes
 import gc
 import logging
 import sys
@@ -83,7 +84,7 @@ class WheelController:
         
         operating_range = self.controller.get_operating_range(
             index=self.controller_index, 
-            range=self.controller.c_int()
+            range=ctypes.c_int()
         )
         logger.info(f"Operating range: {operating_range} degrees")
     
@@ -133,8 +134,11 @@ class WheelController:
             # Ensure values are within valid ranges
             offset = max(-100, min(100, int(offset_percentage)))
             saturation = max(0, min(100, int(saturation_percentage)))
-            coefficient = max(0, min(100, int(coefficient_percentage)))
+            coefficient = max(-100, min(100, int(coefficient_percentage)))
             
+            if coefficient < 0:
+                logger.warning(f"Coefficient {coefficient} will make the steering wheel rotate reversly")
+
             success = self.controller.play_spring_force(
                 index=self.controller_index,
                 offset_percentage=offset,

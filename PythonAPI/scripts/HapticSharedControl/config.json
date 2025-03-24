@@ -11,11 +11,11 @@
 	},
 	"force_feedback": {
 		"saturation_percentage": 100,
-		"coefficient_percentage": 30
+		"coefficient_percentage": 100
 	},
 	"logging": {
 		"enable_debug": true,
 		"log_dir": "./logs"
 	},
-	"default_path_idx": "3"
+	"default_path_idx": "1"
 }

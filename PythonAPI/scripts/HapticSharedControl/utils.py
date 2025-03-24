@@ -153,7 +153,7 @@ def rotation_matrix_ccw(angle_rad: float) -> np.ndarray:
 
 def find_closest_point(given_point: Union[List[float], np.ndarray], 
                        list_of_points: Union[List[List[float]], np.ndarray], 
-                       method: str = "KDTree") -> Tuple[np.ndarray, int]:
+                       method: str = "Brute") -> Tuple[np.ndarray, int]:
     """
     Find the closest point in a list to a given point.
     

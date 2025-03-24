@@ -5,13 +5,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import carla
 import numpy as np
 from config_manager import ConfigManager
 from DReyeVR_utils import DReyeVRSensor, find_ego_vehicle, save_sensor_data_to_csv
 from HapticSharedControl.haptic_algo import HapticSharedControl
 from HapticSharedControl.utils import dist
 from HapticSharedControl.wheel_control import WheelController
+
+import carla
 
 
 class DReyeVRController:
@@ -33,7 +34,7 @@ class DReyeVRController:
         self.log_dir = self.config.get_logging_dir()
         
         # State variables
-        self.ready = False
+        self.ready = True
         self.take_control = False
         self.backward_btn_pressed_cnt = 0
         self.delta_t = self.config.get_config("simulation.delta_t", 1.0/60)
@@ -204,7 +205,7 @@ class DReyeVRController:
         haptic_control.debug = self.config.get_config("logging.enable_debug", True)
         
         # Calculate torque and desired steering angle
-        torque, coef, desired_steering_angle_deg = haptic_control.calculate_torque(
+        _, _, desired_steering_angle_deg = haptic_control.calculate_torque(
             current_position=position_to_world,
             current_yaw_angle_deg=vehicle_yaw,
             steering_angles_deg=steering_angles,
@@ -314,56 +315,53 @@ class DReyeVRController:
             return
 
         print("=====================================")
-
-        try:
-            # 1. Get vehicle state
-            position_to_world = measured_carla_data["Location"][0:2]
-            vehicle_yaw = measured_carla_data["Rotation"][1]
-            velocity = measured_carla_data["Velocity"][0:2]
-            speed = np.linalg.norm(velocity)
+        
+        
+        # 1. Get vehicle state
+        position_to_world = measured_carla_data["Location"][0:2]
+        vehicle_yaw = measured_carla_data["Rotation"][1]
+        velocity = measured_carla_data["Velocity"][0:2]
+        speed = np.linalg.norm(velocity)
+        
+        # 2. Handle driving direction
+        buttons = self.controller.get_buttons_pressed()
+        backward = self.handle_driving_direction(buttons)
+        
+        # Adjust speed for direction
+        speed *= -1 if backward else 1
+        print("Driving Direction:", "Backward" if backward else "Forward")
+        
+        # 3. Get steering information
+        steering_wheel_angle = self.controller.get_angle() * 450.0
+        steering_angles = [
+            measured_carla_data["FL_Wheel_Angle"],
+            measured_carla_data["FR_Wheel_Angle"],
+        ]
+        
+        # 4. Check if control should be triggered
+        self.check_path_control_triggers(position_to_world)
+        
+        # 5. Execute control or show distance info
+        if self.take_control:
+            self.execute_haptic_control(
+                position_to_world,
+                vehicle_yaw,
+                steering_angles,
+                steering_wheel_angle,
+                speed
+            )
             
-            # 2. Handle driving direction
-            buttons = self.controller.get_buttons_pressed()
-            backward = self.handle_driving_direction(buttons)
-            
-            # Adjust speed for direction
-            speed *= -1 if backward else 1
-            print("Driving Direction:", "Backward" if backward else "Forward")
-            
-            # 3. Get steering information
-            steering_wheel_angle = self.controller.get_angle() * 450.0
-            steering_angles = [
-                measured_carla_data["FL_Wheel_Angle"],
-                measured_carla_data["FR_Wheel_Angle"],
-            ]
-            
-            # 4. Check if control should be triggered
-            self.check_path_control_triggers(position_to_world)
-            
-            # 5. Execute control or show distance info
-            if self.take_control:
-                self.execute_haptic_control(
-                    position_to_world,
-                    vehicle_yaw,
-                    steering_angles,
-                    steering_wheel_angle,
-                    speed
-                )
-                
-                # Save sensor data
-                save_sensor_data_to_csv(measured_carla_data, file_path=str(self.sensor_log_path))
-            else:
-                self.print_distance_info(position_to_world)
-            
-            # 6. Check if destination reached
-            if self.check_destination_reached(position_to_world):
-                sys.exit(0)
-            
-            # Wait for next frame
-            time.sleep(self.delta_t)
-            
-        except Exception as e:
-            print(f"Error in control loop: {e}")
+            # Save sensor data
+            save_sensor_data_to_csv(measured_carla_data, file_path=str(self.sensor_log_path))
+        else:
+            self.print_distance_info(position_to_world)
+        
+        # 6. Check if destination reached
+        if self.check_destination_reached(position_to_world):
+            sys.exit(0)
+        
+        # Wait for next frame
+        time.sleep(self.delta_t)
 
 
 def main():

@@ -86,11 +86,10 @@ def look_ahead_distance(vel, tp, cur_pos=None, end_pos=None, method="fix"):
     """
     if method == 'fix':
         return sign(vel) * 4.8 # Fixed distance of 4.8m
-    elif method == 'dynamic-0':
-        return sign(vel) * np.linalg.norm(np.array(end_pos) - np.array(cur_pos))
-    elif method == 'dynamic-1':
-        # 
-        return sign(vel)        
+    elif method == 'dynamic':
+        return sign(vel) * 1.0 *  dist(cur_pos, end_pos) # Dynamic distance based on trajectory  
+    else:
+        return vel * tp    
     
 
 def predict_position(
@@ -470,7 +469,7 @@ class HapticSharedControl:
                 cur_pos=self.r,
                 end_pos=[self.desired_trajectory_params["end_x"], 
                          self.desired_trajectory_params["end_y"]],
-                method="dynamic"
+                method="None"
             ),
         )
         
