@@ -469,7 +469,7 @@ class HapticSharedControl:
                 cur_pos=self.r,
                 end_pos=[self.desired_trajectory_params["end_x"], 
                          self.desired_trajectory_params["end_y"]],
-                method="None"
+                method="fix"
             ),
         )
         
