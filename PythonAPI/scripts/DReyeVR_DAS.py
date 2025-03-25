@@ -237,11 +237,12 @@ class DReyeVRController:
         
         # Apply force feedback
         print(f"--> Desired Offset: {desired_offset}")
-        self.controller.play_spring_force(
-            offset_percentage=desired_offset,
-            saturation_percentage=saturation,
-            coefficient_percentage=coefficient,
-        )
+        if coefficient > 0:
+            self.controller.play_spring_force(
+                offset_percentage=desired_offset,
+                saturation_percentage=saturation,
+                coefficient_percentage=coefficient,
+            )
         
         # Log wheel data
         self.log_wheel_data(desired_steering_angle_deg)
