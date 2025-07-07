@@ -1,0 +1,90 @@
+{
+	"simulation": {
+		"sync_mode": false,
+		"delta_t": 0.05,
+		"update_frequency": 20.0
+	},
+	"trigger_area": {
+		"center": {
+			"x": 0.0,
+			"y": 0.0,
+			"z": 0.0
+		},
+		"radius": 50.0,
+		"description": "Circular area that triggers walker spawning when vehicle enters"
+	},
+	"walker_spawn": {
+		"number_of_walkers": 10,
+		"spawn_positions": [
+			{
+				"x": -10.0,
+				"y": -10.0,
+				"z": 0.3
+			},
+			{
+				"x": -5.0,
+				"y": -10.0,
+				"z": 0.3
+			},
+			{
+				"x": 0.0,
+				"y": -10.0,
+				"z": 0.3
+			},
+			{
+				"x": 5.0,
+				"y": -10.0,
+				"z": 0.3
+			},
+			{
+				"x": 10.0,
+				"y": -10.0,
+				"z": 0.3
+			}
+		],
+		"target_positions": [
+			{
+				"x": -10.0,
+				"y": 10.0,
+				"z": 0.3
+			},
+			{
+				"x": -5.0,
+				"y": 10.0,
+				"z": 0.3
+			},
+			{
+				"x": 0.0,
+				"y": 10.0,
+				"z": 0.3
+			},
+			{
+				"x": 5.0,
+				"y": 10.0,
+				"z": 0.3
+			},
+			{
+				"x": 10.0,
+				"y": 10.0,
+				"z": 0.3
+			}
+		],
+		"walker_speed": {
+			"min": 1.0,
+			"max": 2.5,
+			"default": 1.5
+		},
+		"walker_filter": "walker.pedestrian.*",
+		"generation": "2",
+		"is_invincible": false
+	},
+	"vehicle_tracking": {
+		"role_name": "hero",
+		"check_interval": 0.1,
+		"spawn_once_per_entry": true
+	},
+	"logging": {
+		"enable_debug": true,
+		"log_file": "walker_spawn_log.txt"
+	}
+}

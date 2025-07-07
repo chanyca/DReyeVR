@@ -209,3 +209,5 @@ Tools/LOD/OriginalLODs/
 Tools/LOD/OriginalLODs.zip
 *.png
 *.pdf
+*.mkv
+*/plots/
