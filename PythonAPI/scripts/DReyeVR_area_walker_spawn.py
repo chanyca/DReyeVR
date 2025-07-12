@@ -18,7 +18,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
@@ -30,8 +30,9 @@ except IndexError:
 
 import argparse
 
-import carla
 from numpy import random
+
+import carla
 
 
 class WalkerSpawnConfig:
@@ -76,7 +77,7 @@ class WalkerSpawnConfig:
     def get_logging_config(self) -> Dict[str, Any]:
         """Get logging configuration"""
         return self.config.get("logging", {})
-
+ 
 
 class VehicleTracker:
     """Tracks vehicle position and detects area entry"""
@@ -151,15 +152,17 @@ class VehicleTracker:
 class WalkerSpawner:
     """Handles spawning and control of walkers"""
     
-    def __init__(self, world: carla.World, config: WalkerSpawnConfig):
+    def __init__(self, world: carla.World, client: carla.Client, config: WalkerSpawnConfig):
         """
         Initialize walker spawner
         
         Args:
             world: CARLA world instance
+            client: CARLA client instance
             config: Configuration manager
         """
         self.world = world
+        self.client = client
         self.config = config
         self.walker_config = config.get_walker_spawn_config()
         
@@ -224,7 +227,16 @@ class WalkerSpawner:
             logging.warning("No spawn positions defined. Cannot spawn walkers.")
             return False
         
-        logging.info(f"Spawning {max_walkers} walkers...")
+        # Get movement configuration
+        movement_config = self.walker_config.get("walker_movement", {})
+        movement_type = movement_config.get("type", "target_based")
+        
+        logging.info(f"Spawning {max_walkers} walkers with movement type: {movement_type}")
+        
+        if movement_type == "target_based":
+            logging.info(f"Walkers will walk to predefined target positions at default speed: {speed_config.get('default', 1.5):.1f} m/s")
+        else:
+            logging.info(f"Walkers will use random walk within {movement_config.get('movement_radius', 5.0):.1f}m radius")
         
         # Prepare spawn points
         spawn_points = []
@@ -242,15 +254,24 @@ class WalkerSpawner:
             )
             spawn_points.append(spawn_point)
             
-            # Determine walker speed
+            # Determine walker speed based on movement type
+            movement_config = self.walker_config.get("walker_movement", {})
+            movement_type = movement_config.get("type", "target_based")
+            
             min_speed = speed_config.get("min", 1.0)
             max_speed = speed_config.get("max", 2.5)
             default_speed = speed_config.get("default", 1.5)
             
-            if min_speed == max_speed:
-                speed = default_speed
+            if movement_type == "random_walk":
+                # Use random speed for random walk mode
+                if min_speed == max_speed:
+                    speed = default_speed
+                else:
+                    speed = random.uniform(min_speed, max_speed)
             else:
-                speed = random.uniform(min_speed, max_speed)
+                # Use default speed for target-based movement
+                speed = default_speed
+            
             walker_speeds.append(speed)
         
         # Spawn walker actors
@@ -265,8 +286,7 @@ class WalkerSpawner:
             batch.append(carla.command.SpawnActor(walker_bp, spawn_point))
         
         # Execute spawn batch
-        client = self.world.get_client()
-        results = client.apply_batch_sync(batch, True)
+        results = self.client.apply_batch_sync(batch, True)
         
         # Process spawn results
         successful_spawns = []
@@ -287,7 +307,7 @@ class WalkerSpawner:
         for walker_data in self.walkers_list:
             batch.append(carla.command.SpawnActor(walker_controller_bp, carla.Transform(), walker_data["id"]))
         
-        results = client.apply_batch_sync(batch, True)
+        results = self.client.apply_batch_sync(batch, True)
         
         # Process controller spawn results
         for i, result in enumerate(results):
@@ -308,6 +328,9 @@ class WalkerSpawner:
         self.world.wait_for_tick()
         
         # Initialize walker controllers and set targets
+        movement_config = self.walker_config.get("walker_movement", {})
+        movement_type = movement_config.get("type", "target_based")
+        
         for i in range(0, len(self.all_walker_ids), 2):
             controller_actor = all_actors[i]
             walker_idx = i // 2
@@ -315,18 +338,30 @@ class WalkerSpawner:
             # Start walker
             controller_actor.start()
             
-            # Set target location
-            if walker_idx < len(target_positions):
-                target_pos = target_positions[walker_idx % len(target_positions)]
-                target_location = carla.Location(
-                    x=target_pos["x"],
-                    y=target_pos["y"],
-                    z=target_pos["z"]
+            # Set movement behavior based on configuration
+            if movement_type == "random_walk":
+                # Use random walking within radius
+                spawn_location = carla.Location(
+                    x=spawn_points[walker_idx].location.x,
+                    y=spawn_points[walker_idx].location.y,
+                    z=spawn_points[walker_idx].location.z
                 )
-                controller_actor.go_to_location(target_location)
+                self._setup_random_walking(controller_actor, spawn_location, movement_config)
             else:
-                # Use random location if no specific target
-                controller_actor.go_to_location(self.world.get_random_location_from_navigation())
+                # Use traditional target-based movement
+                if walker_idx < len(target_positions):
+                    target_pos = target_positions[walker_idx % len(target_positions)]
+                    target_location = carla.Location(
+                        x=target_pos["x"],
+                        y=target_pos["y"],
+                        z=target_pos["z"]
+                    )
+                    controller_actor.go_to_location(target_location)
+                    logging.debug(f"Walker {walker_idx} walking to target: ({target_pos['x']:.1f}, {target_pos['y']:.1f})")
+                else:
+                    # Use random location if no specific target
+                    controller_actor.go_to_location(self.world.get_random_location_from_navigation())
+                    logging.debug(f"Walker {walker_idx} walking to random navigation location")
             
             # Set speed
             if walker_idx < len(walker_speeds):
@@ -349,15 +384,269 @@ class WalkerSpawner:
                 logging.warning(f"Failed to stop walker controller: {e}")
         
         # Destroy all actors
-        client = self.world.get_client()
-        client.apply_batch([carla.command.DestroyActor(x) for x in self.all_walker_ids])
+        self.client.apply_batch([carla.command.DestroyActor(x) for x in self.all_walker_ids])
         
         logging.info(f"Destroyed {len(self.walkers_list)} walkers")
+        
+        # Reset tracking data
+        self.reset_walker_tracking()
         
         # Clear lists
         self.walkers_list.clear()
         self.all_walker_ids.clear()
+    
+    def _get_random_location_in_radius(self, center: carla.Location, radius: float) -> carla.Location:
+        """
+        Generate a random location within a specified radius from center point
+        
+        Args:
+            center: Center location
+            radius: Maximum radius in meters
+            
+        Returns:
+            Random location within radius
+        """
+        import random
+        import math
+        
+        # Generate random angle and distance
+        angle = random.uniform(0, 2 * math.pi)
+        distance = random.uniform(0, radius)
+        
+        # Calculate new position
+        x = center.x + distance * math.cos(angle)
+        y = center.y + distance * math.sin(angle)
+        
+        return carla.Location(x=x, y=y, z=center.z)
+    
+    def _setup_random_walking(self, controller_actor: carla.WalkerAIController, 
+                            spawn_location: carla.Location, movement_config: Dict[str, Any]) -> None:
+        """
+        Setup random walking behavior for a walker controller
+        
+        Args:
+            controller_actor: Walker AI controller
+            spawn_location: Original spawn location (center of movement area)
+            movement_config: Movement configuration from config file
+        """
+        radius = movement_config.get("movement_radius", 5.0)
+        use_navigation = movement_config.get("use_navigation_mesh", True)
+        
+        if use_navigation:
+            # Use CARLA's navigation mesh for more realistic movement
+            random_location = self.world.get_random_location_from_navigation()
+            if random_location:
+                controller_actor.go_to_location(random_location)
+            else:
+                # Fallback to random location within radius
+                target_location = self._get_random_location_in_radius(spawn_location, radius)
+                controller_actor.go_to_location(target_location)
+        else:
+            # Use simple random walking within radius
+            target_location = self._get_random_location_in_radius(spawn_location, radius)
+            controller_actor.go_to_location(target_location)
+    
+    def update_walker_destinations(self) -> None:
+        """
+        Update walker destinations for continuous random walking behavior
+        Should be called periodically to keep walkers moving randomly
+        """
+        if not self.walkers_list:
+            return
+            
+        movement_config = self.walker_config.get("walker_movement", {})
+        movement_type = movement_config.get("type", "target_based")
+        
+        if movement_type != "random_walk":
+            return
+            
+        try:
+            all_actors = self.world.get_actors(self.all_walker_ids)
+            spawn_positions = self.walker_config.get("spawn_positions", [])
+            
+            for i in range(0, len(self.all_walker_ids), 2):
+                controller_actor = all_actors[i]
+                walker_idx = i // 2
+                
+                # Always update destination for random walk mode (no state check)
+                # Get original spawn location as center for random walking
+                if walker_idx < len(spawn_positions):
+                    spawn_pos = spawn_positions[walker_idx]
+                    spawn_location = carla.Location(
+                        x=spawn_pos["x"],
+                        y=spawn_pos["y"], 
+                        z=spawn_pos["z"]
+                    )
+                    self._setup_random_walking(controller_actor, spawn_location, movement_config)
+                    
+        except Exception as e:
+            logging.warning(f"Failed to update walker destinations: {e}")
+    
+    def monitor_walker_progress(self) -> None:
+        """
+        Monitor walker progress and log when they reach their destinations
+        
+        Note: Since WalkerAIController doesn't have get_state() method in CARLA,
+        we use position-based detection and movement tracking to determine
+        when walkers have reached their destinations.
+        
+        For target-based movement:
+        - Walker is considered "reached" only when within 2 meters of target
+        - Walker is considered "stuck" if stationary for 5+ seconds but not at target
+        - Stuck walkers are logged as warnings with diagnostic information
+        """
+        if not self.walkers_list:
+            return
+            
+        try:
+            all_actors = self.world.get_actors(self.all_walker_ids)
+            target_positions = self.walker_config.get("target_positions", [])
+            movement_config = self.walker_config.get("walker_movement", {})
+            movement_type = movement_config.get("type", "target_based")
+            
+            for i in range(0, len(self.all_walker_ids), 2):
+                controller_actor = all_actors[i]
+                walker_actor = all_actors[i + 1] if i + 1 < len(all_actors) else None
+                walker_idx = i // 2
+                
+                if not controller_actor or not walker_actor:
+                    continue
+                
+                walker_data = self.walkers_list[walker_idx] if walker_idx < len(self.walkers_list) else None
+                
+                if not walker_data:
+                    continue
+                
+                # Initialize tracking if not already done
+                if 'destination_reached' not in walker_data:
+                    walker_data['destination_reached'] = False
+                    walker_data['start_location'] = walker_actor.get_location()
+                    walker_data['target_set'] = True
+                    walker_data['last_location'] = walker_actor.get_location()
+                    walker_data['stationary_time'] = 0.0
+                
+                # Skip if already reached destination
+                if walker_data['destination_reached']:
+                    continue
+                
+                current_location = walker_actor.get_location()
+                start_location = walker_data['start_location']
+                last_location = walker_data['last_location']
+                
+                # Check if walker is moving (simple velocity check)
+                movement_threshold = 0.1  # meters
+                distance_moved = current_location.distance(last_location)
+                
+                if distance_moved < movement_threshold:
+                    walker_data['stationary_time'] += 0.1  # Approximate time step
+                else:
+                    walker_data['stationary_time'] = 0.0
+                
+                walker_data['last_location'] = current_location
+                
+                # Check if walker has reached destination based on movement type
+                destination_reached = False
+                
+                if movement_type == "target_based" and walker_idx < len(target_positions):
+                    # For target-based movement, check proximity to target
+                    target_pos = target_positions[walker_idx % len(target_positions)]
+                    target_location = carla.Location(x=target_pos["x"], y=target_pos["y"], z=target_pos["z"])
+                    distance_to_target = current_location.distance(target_location)
+                    
+                    # Only consider reached if within 2 meters of target
+                    if distance_to_target < 2.0:
+                        destination_reached = True
+                        
+                        distance_traveled = current_location.distance(start_location)
+                        logging.info(f"Walker {walker_idx} reached target destination at "
+                                   f"({current_location.x:.2f}, {current_location.y:.2f}). "
+                                   f"Target was ({target_pos['x']:.2f}, {target_pos['y']:.2f}). "
+                                   f"Distance traveled: {distance_traveled:.2f}m, "
+                                   f"Distance to target: {distance_to_target:.2f}m")
+                    
+                    # Log if walker is stuck (stationary for too long but not at target)
+                    elif walker_data['stationary_time'] > 5.0:
+                        distance_traveled = current_location.distance(start_location)
+                        logging.warning(f"Walker {walker_idx} appears stuck at "
+                                      f"({current_location.x:.2f}, {current_location.y:.2f}). "
+                                      f"Target was ({target_pos['x']:.2f}, {target_pos['y']:.2f}). "
+                                      f"Distance traveled: {distance_traveled:.2f}m, "
+                                      f"Distance to target: {distance_to_target:.2f}m, "
+                                      f"Stationary for: {walker_data['stationary_time']:.1f}s")
+                        
+                        # Mark as reached to avoid repeated warnings
+                        walker_data['destination_reached'] = True
+                        walker_data['stuck'] = True
+                        
+                elif movement_type == "random_walk":
+                    # For random walk, check if walker has been stationary for a while
+                    if walker_data['stationary_time'] > 3.0:
+                        destination_reached = True
+                        
+                        distance_traveled = current_location.distance(start_location)
+                        logging.info(f"Walker {walker_idx} reached random destination at "
+                                   f"({current_location.x:.2f}, {current_location.y:.2f}). "
+                                   f"Distance traveled: {distance_traveled:.2f}m")
+                
+                if destination_reached:
+                    walker_data['destination_reached'] = True
+                    walker_data['final_location'] = current_location
+                    
+        except Exception as e:
+            logging.warning(f"Failed to monitor walker progress: {e}")
 
+    def log_walker_progress(self) -> None:
+        """
+        Log periodic progress updates for debugging walker navigation
+        """
+        if not self.walkers_list:
+            return
+            
+        try:
+            all_actors = self.world.get_actors(self.all_walker_ids)
+            target_positions = self.walker_config.get("target_positions", [])
+            
+            for i in range(0, len(self.all_walker_ids), 2):
+                walker_actor = all_actors[i + 1] if i + 1 < len(all_actors) else None
+                walker_idx = i // 2
+                
+                if not walker_actor:
+                    continue
+                    
+                walker_data = self.walkers_list[walker_idx] if walker_idx < len(self.walkers_list) else None
+                if not walker_data or walker_data.get('destination_reached', False):
+                    continue
+                
+                current_location = walker_actor.get_location()
+                
+                if walker_idx < len(target_positions):
+                    target_pos = target_positions[walker_idx % len(target_positions)]
+                    target_location = carla.Location(x=target_pos["x"], y=target_pos["y"], z=target_pos["z"])
+                    distance_to_target = current_location.distance(target_location)
+                    
+                    logging.debug(f"Walker {walker_idx} progress: "
+                                f"Current ({current_location.x:.2f}, {current_location.y:.2f}), "
+                                f"Target ({target_pos['x']:.2f}, {target_pos['y']:.2f}), "
+                                f"Distance to target: {distance_to_target:.2f}m, "
+                                f"Stationary time: {walker_data.get('stationary_time', 0):.1f}s")
+                    
+        except Exception as e:
+            logging.debug(f"Failed to log walker progress: {e}")
+
+    def reset_walker_tracking(self) -> None:
+        """
+        Reset walker tracking data for fresh monitoring
+        """
+        for walker_data in self.walkers_list:
+            walker_data.pop('destination_reached', None)
+            walker_data.pop('start_location', None)
+            walker_data.pop('final_location', None)
+            walker_data.pop('target_set', None)
+            walker_data.pop('last_location', None)
+            walker_data.pop('stationary_time', None)
+            walker_data.pop('stuck', None)
+        
+        logging.debug("Walker tracking data reset")
 
 def find_hero_vehicle(world: carla.World, role_name: str = "hero") -> Optional[carla.Vehicle]:
     """
@@ -396,7 +685,7 @@ def main():
     )
     argparser.add_argument(
         '--config',
-        default='walker_spawn_config.json',
+        default='./walker_spawn_config.json',
         help='Path to configuration file (default: walker_spawn_config.json)'
     )
     argparser.add_argument(
@@ -442,7 +731,7 @@ def main():
         
         # Initialize components
         vehicle_tracker = VehicleTracker(config)
-        walker_spawner = WalkerSpawner(world, config)
+        walker_spawner = WalkerSpawner(world, client, config)
         
         # Get tracking configuration
         vehicle_config = config.get_vehicle_tracking_config()
@@ -453,6 +742,11 @@ def main():
         
         # Main loop
         last_check_time = 0
+        last_walker_update = 0
+        last_progress_log = 0
+        walker_update_interval = 5.0  # Update walker destinations every 5 seconds
+        progress_log_interval = 10.0  # Log walker progress every 10 seconds
+        
         while True:
             current_time = time.time()
             
@@ -478,6 +772,22 @@ def main():
                             logging.error("Failed to spawn walkers")
                 
                 last_check_time = current_time
+            
+            # Update walker destinations for random walking (only if in random walk mode)
+            movement_config = config.get_walker_spawn_config().get("walker_movement", {})
+            if (movement_config.get("type", "target_based") == "random_walk" and 
+                current_time - last_walker_update >= walker_update_interval):
+                walker_spawner.update_walker_destinations()
+                last_walker_update = current_time
+            
+            # Monitor walker progress and log when they reach destinations
+            walker_spawner.monitor_walker_progress()
+            
+            # Log walker progress for debugging (only in DEBUG mode)
+            if (logging.getLogger().isEnabledFor(logging.DEBUG) and 
+                current_time - last_progress_log >= progress_log_interval):
+                walker_spawner.log_walker_progress()
+                last_progress_log = current_time
             
             # Handle world tick based on sync mode
             if settings.synchronous_mode:

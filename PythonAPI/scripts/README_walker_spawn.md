@@ -102,12 +102,12 @@ python DReyeVR_area_walker_spawn.py --host 192.168.1.100 --port 2000
 
 ```json
 "spawn_positions": [
-    {"x": -10.0, "y": -10.0, "z": 0.3},  // Left side of road
-    {"x": 10.0, "y": -10.0, "z": 0.3}    // Right side of road
+    {"x": -389.46, "y": 9917.06, "z": 0.3,  // Left side of road
+    {"x": 0, "y": 0, "z": 0.3}    // Right side of road
 ],
 "target_positions": [
-    {"x": -10.0, "y": 10.0, "z": 0.3},   // Cross to other side
-    {"x": 10.0, "y": 10.0, "z": 0.3}     // Cross to other side
+    {"x": 413.30, "y": 9917.06, "z": 0.3},   // Cross to other side
+    {"x": -10, "y": 10, "z": 0.3}     // Cross to other side
 ]
 ```
 

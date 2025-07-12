@@ -14,63 +14,46 @@
 		"description": "Circular area that triggers walker spawning when vehicle enters"
 	},
 	"walker_spawn": {
-		"number_of_walkers": 10,
+		"number_of_walkers": 2,
 		"spawn_positions": [
 			{
-				"x": -10.0,
-				"y": -10.0,
-				"z": 0.3
-			},
-			{
-				"x": -5.0,
-				"y": -10.0,
-				"z": 0.3
-			},
-			{
-				"x": 0.0,
-				"y": -10.0,
+				"x": 1.0,
+				"y": 1.0,
 				"z": 0.3
 			},
 			{
 				"x": 5.0,
-				"y": -10.0,
-				"z": 0.3
-			},
-			{
-				"x": 10.0,
-				"y": -10.0,
+				"y": 5.0,
 				"z": 0.3
 			}
+			
 		],
 		"target_positions": [
 			{
-				"x": -10.0,
-				"y": 10.0,
-				"z": 0.3
-			},
-			{
-				"x": -5.0,
-				"y": 10.0,
-				"z": 0.3
-			},
-			{
-				"x": 0.0,
-				"y": 10.0,
-				"z": 0.3
-			},
-			{
-				"x": 5.0,
-				"y": 10.0,
-				"z": 0.3
-			},
-			{
 				"x": 10.0,
 				"y": 10.0,
 				"z": 0.3
+			},
+			{
+				"x": 15.0,
+				"y": 15.0,
+				"z": 0.3
 			}
 		],
+		"walker_movement": {
+			"type": "target_based",
+			"movement_radius": 5.0,
+			"change_direction_interval": 5.0,
+			"use_navigation_mesh": true,
+			"_comments": {
+				"type": "Movement type: 'target_based' for walking to fixed targets, 'random_walk' for 5m radius movement",
+				"movement_radius": "Maximum distance in meters walkers will move from their spawn position (for random_walk)",
+				"change_direction_interval": "How often (in seconds) walkers get new random destinations (for random_walk)",
+				"use_navigation_mesh": "Whether to use CARLA's navigation mesh for more realistic pathfinding"
+			}
+		},
 		"walker_speed": {
-			"min": 1.0,
+			"min": 0.5,
 			"max": 2.5,
 			"default": 1.5
 		},
